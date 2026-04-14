@@ -2,94 +2,85 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap');
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 20 30% 3%;
+    --foreground: 38 40% 88%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card: 20 20% 6%;
+    --card-foreground: 38 40% 88%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover: 20 25% 5%;
+    --popover-foreground: 38 40% 88%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 43 50% 54%;
+    --primary-foreground: 20 30% 3%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 20 15% 12%;
+    --secondary-foreground: 38 30% 75%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 20 10% 10%;
+    --muted-foreground: 38 15% 55%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 0 65% 33%;
+    --accent-foreground: 38 40% 90%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 65% 33%;
+    --destructive-foreground: 38 40% 90%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 43 30% 18%;
+    --input: 43 20% 15%;
+    --ring: 43 50% 54%;
 
-    --radius: 0.5rem;
+    --radius: 0.25rem;
+
+    /* Game-specific tokens */
+    --ink: 20 30% 3%;
+    --parchment: 38 40% 88%;
+    --gold: 43 50% 54%;
+    --gold-dark: 38 52% 35%;
+    --blood: 0 65% 33%;
+    --rust: 20 60% 41%;
+    --ash: 20 10% 14%;
+    --mist: 38 15% 55%;
+
+    /* Faction colors */
+    --faction-amber: 33 60% 48%;
+    --faction-iron: 0 65% 33%;
+    --faction-green: 120 32% 37%;
+    --faction-scholar: 270 30% 32%;
+    --faction-ashen: 55 40% 29%;
+    --faction-tide: 200 50% 36%;
+
+    /* Reputation colors */
+    --rep-conquest: 24 52% 54%;
+    --rep-trade: 155 36% 48%;
+    --rep-craft: 48 36% 45%;
+    --rep-diplomacy: 220 52% 54%;
+    --rep-exploration: 55 52% 54%;
+    --rep-arcane: 270 52% 54%;
+
+    /* Fonts */
+    --font-display: 'Cinzel', serif;
+    --font-body: 'EB Garamond', serif;
+    --font-mono: 'Courier Prime', monospace;
+
+    /* Gradients */
+    --gradient-gold: linear-gradient(135deg, hsl(43 50% 54%), hsl(38 52% 35%));
+    --gradient-vignette: radial-gradient(ellipse at center, transparent 40%, hsl(20 30% 3% / 0.8));
+    --gradient-nav: linear-gradient(to bottom, hsl(20 30% 3% / 0.97), transparent);
+    --shadow-gold: 0 0 30px hsl(43 50% 54% / 0.15);
+    --shadow-blood: 0 0 20px hsl(0 65% 33% / 0.2);
 
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
-
     --sidebar-primary: 240 5.9% 10%;
-
     --sidebar-primary-foreground: 0 0% 98%;
-
     --sidebar-accent: 240 4.8% 95.9%;
-
     --sidebar-accent-foreground: 240 5.9% 10%;
-
     --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 }
@@ -101,5 +92,75 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-body);
+    font-size: 18px;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: hsl(var(--ink)); }
+  ::-webkit-scrollbar-thumb { background: hsl(var(--gold-dark)); border-radius: 3px; }
+
+  /* Noise overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    opacity: 0.3;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
+  .font-body {
+    font-family: var(--font-body);
+  }
+  .font-mono-game {
+    font-family: var(--font-mono);
+  }
+  .text-gold {
+    color: hsl(var(--gold));
+  }
+  .text-parchment {
+    color: hsl(var(--parchment));
+  }
+  .text-mist {
+    color: hsl(var(--mist));
+  }
+  .text-blood {
+    color: hsl(var(--blood));
+  }
+  .bg-ink {
+    background-color: hsl(var(--ink));
+  }
+  .bg-ash {
+    background-color: hsl(var(--ash));
+  }
+  .border-gold {
+    border-color: hsl(var(--gold) / 0.2);
+  }
+  .border-gold-strong {
+    border-color: hsl(var(--gold) / 0.4);
+  }
+  .gold-glow {
+    text-shadow: 0 0 40px hsl(var(--gold) / 0.3);
+  }
+  .gold-rule {
+    width: 60px;
+    height: 2px;
+    background: hsl(var(--gold));
+  }
+
+  /* Scrollable game panel */
+  .game-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--gold-dark)) transparent;
   }
 }

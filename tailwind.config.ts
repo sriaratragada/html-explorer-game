@@ -47,6 +47,26 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        ink: "hsl(var(--ink))",
+        parchment: "hsl(var(--parchment))",
+        gold: "hsl(var(--gold))",
+        "gold-dark": "hsl(var(--gold-dark))",
+        blood: "hsl(var(--blood))",
+        rust: "hsl(var(--rust))",
+        ash: "hsl(var(--ash))",
+        mist: "hsl(var(--mist))",
+        "faction-amber": "hsl(var(--faction-amber))",
+        "faction-iron": "hsl(var(--faction-iron))",
+        "faction-green": "hsl(var(--faction-green))",
+        "faction-scholar": "hsl(var(--faction-scholar))",
+        "faction-ashen": "hsl(var(--faction-ashen))",
+        "faction-tide": "hsl(var(--faction-tide))",
+        "rep-conquest": "hsl(var(--rep-conquest))",
+        "rep-trade": "hsl(var(--rep-trade))",
+        "rep-craft": "hsl(var(--rep-craft))",
+        "rep-diplomacy": "hsl(var(--rep-diplomacy))",
+        "rep-exploration": "hsl(var(--rep-exploration))",
+        "rep-arcane": "hsl(var(--rep-arcane))",
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
@@ -58,6 +78,11 @@ export default {
           ring: "hsl(var(--sidebar-ring))",
         },
       },
+      fontFamily: {
+        display: ['Cinzel', 'serif'],
+        body: ['EB Garamond', 'serif'],
+        mono: ['Courier Prime', 'monospace'],
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
@@ -65,25 +90,31 @@ export default {
       },
       keyframes: {
         "accordion-down": {
-          from: {
-            height: "0",
-          },
-          to: {
-            height: "var(--radix-accordion-content-height)",
-          },
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
         },
         "accordion-up": {
-          from: {
-            height: "var(--radix-accordion-content-height)",
-          },
-          to: {
-            height: "0",
-          },
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
+        },
+        "fade-up": {
+          from: { opacity: "0", transform: "translateY(20px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        "pulse-gold": {
+          "0%, 100%": { opacity: "0.3" },
+          "50%": { opacity: "1" },
+        },
+        "typewriter": {
+          from: { width: "0" },
+          to: { width: "100%" },
         },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "fade-up": "fade-up 0.6s ease-out both",
+        "pulse-gold": "pulse-gold 2s ease infinite",
       },
     },
   },
