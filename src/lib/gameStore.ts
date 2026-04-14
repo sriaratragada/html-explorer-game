@@ -113,7 +113,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastResult: null,
       visitedLocations: visited ? state.visitedLocations : [...state.visitedLocations, locationId],
       chronicle: [...state.chronicle, ...newChronicle],
-      playerTitle: getPlayerTitle(state.reputation),
+      playerTitle: getPlayerTitle(state.reputation as unknown as Record<string, number>),
     });
   },
 
