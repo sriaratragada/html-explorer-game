@@ -178,7 +178,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastResult: choice.resultText,
       currentEvent: null,
       completedEvents: [...state.completedEvents, state.currentEvent.id],
-      playerTitle: getPlayerTitle(newRep),
+      playerTitle: getPlayerTitle(newRep as unknown as Record<string, number>),
     });
   },
 
