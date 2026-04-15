@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 export default function ChronicleView() {
   const { chronicle, playerTitle } = useGameStore();
   const backToGame = useGameStore(s => s.backToGame);
+  const LORE_PREFIX = '📜 ';
 
   const typeColors: Record<string, string> = {
     action: 'text-parchment',
@@ -12,6 +13,8 @@ export default function ChronicleView() {
     npc: 'text-rep-trade',
     faction: 'text-faction-amber',
     discovery: 'text-rep-exploration',
+    environment: 'text-mist',
+    lore: 'text-amber-200/80',
   };
 
   const typeLabels: Record<string, string> = {
@@ -20,6 +23,8 @@ export default function ChronicleView() {
     npc: 'NPC',
     faction: 'FACTION',
     discovery: 'DISCOVERY',
+    environment: 'ENVIRONMENT',
+    lore: 'LORE',
   };
 
   return (
@@ -50,11 +55,13 @@ export default function ChronicleView() {
                 <p className="font-mono text-[10px] text-mist/50">T:{entry.tick}</p>
               </div>
               <div className="w-px bg-gold/15 shrink-0 self-stretch" />
-              <div className="flex-1 pb-2">
+              <div className={`flex-1 pb-2 ${entry.type === 'lore' ? 'border-l-2 border-amber-400/60 pl-3' : ''}`}>
                 <p className={`font-mono text-[9px] tracking-[0.2em] uppercase mb-1 ${typeColors[entry.type] || 'text-mist'}`}>
                   {typeLabels[entry.type] || entry.type}
                 </p>
-                <p className="text-mist text-[15px] leading-[1.8] italic">{entry.text}</p>
+                <p className={`text-[15px] leading-[1.8] italic ${entry.type === 'lore' ? 'text-amber-200/80' : 'text-mist'}`}>
+                  {entry.type === 'lore' ? `${LORE_PREFIX}${entry.text}` : entry.text}
+                </p>
               </div>
             </motion.div>
           ))}

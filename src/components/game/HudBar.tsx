@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/lib/gameStore';
 import { SEASON_NAMES, SEASON_ICONS, REP_LABELS, LOCATIONS, ENVIRONMENT_ACTIONS } from '@/lib/gameData';
-import { LOCATION_COORDS, TileType, TILE_NAMES, MAP_W } from '@/lib/mapGenerator';
-import { getMap } from '@/lib/gameStore';
+import { LOCATION_COORDS, TileType, TILE_NAMES, MAP_W, MAP_H, getTile } from '@/lib/mapGenerator';
 
 export default function HudBar() {
   const [hoverHealth, setHoverHealth] = useState(false);
@@ -28,9 +27,8 @@ export default function HudBar() {
   const locData = nearestLocation ? LOCATIONS.find(l => l.id === nearestLocation) : null;
 
   // Get current terrain for environment actions
-  const map = getMap();
-  const currentTile: TileType = (playerX >= 0 && playerX < MAP_W && playerY >= 0 && playerY < MAP_W)
-    ? (TILE_NAMES[map.tiles[playerY * MAP_W + playerX]] ?? 'grass')
+  const currentTile: TileType = (playerX >= 0 && playerX < MAP_W && playerY >= 0 && playerY < MAP_H)
+    ? (TILE_NAMES[getTile(playerX, playerY)] ?? 'grass')
     : 'grass';
 
   const availableActions = ENVIRONMENT_ACTIONS.filter(a =>
