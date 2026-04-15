@@ -1,10 +1,10 @@
 import { Season } from './gameTypes';
 
-// ── Value noise ────────────────────────────────────────────────────────────
-const SEED = 42;
+// ── Deterministic noise ────────────────────────────────────────────────────
+export const SEED = 1337;
 
-function hash(x: number, y: number): number {
-  let h = (x * 374761393 + y * 668265263 + SEED) & 0xffffffff;
+export function hash(x: number, y: number, s: number = SEED): number {
+  let h = (x * 374761393 + y * 668265263 + s) & 0xffffffff;
   h = ((h ^ (h >> 13)) * 1274126177) & 0xffffffff;
   h = ((h ^ (h >> 16)) * 1911520717) & 0xffffffff;
   return (h & 0x7fffffff) / 0x7fffffff;
@@ -21,13 +21,13 @@ function smoothNoise(x: number, y: number): number {
   return nx0 + sy * (nx1 - nx0);
 }
 
-function fbm(x: number, y: number, octaves = 5): number {
-  let val = 0, amp = 1, freq = 1, max = 0;
+export function fbm(x: number, y: number, octaves = 4): number {
+  let v = 0, a = 1, f = 1, max = 0;
   for (let i = 0; i < octaves; i++) {
-    val += smoothNoise(x * freq, y * freq) * amp;
-    max += amp; amp *= 0.5; freq *= 2;
+    v += smoothNoise(x * f, y * f) * a;
+    max += a; a *= 0.5; f *= 2;
   }
-  return val / max;
+  return v / max;
 }
 
 // ── Tile types ─────────────────────────────────────────────────────────────
@@ -36,8 +36,7 @@ export type TileType =
   | 'dense_forest' | 'hill' | 'mountain' | 'snow' | 'swamp'
   | 'ruins' | 'road' | 'river' | 'clearing' | 'farm_field';
 
-// Numeric codes for fast Uint8Array storage
-const T = {
+export const T = {
   DEEP_WATER: 0, WATER: 1, SAND: 2, GRASS: 3, FOREST: 4,
   DENSE_FOREST: 5, HILL: 6, MOUNTAIN: 7, SNOW: 8, SWAMP: 9,
   RUINS: 10, ROAD: 11, RIVER: 12, CLEARING: 13, FARM_FIELD: 14,
@@ -49,91 +48,354 @@ export const TILE_NAMES: TileType[] = [
   'ruins', 'road', 'river', 'clearing', 'farm_field',
 ];
 
-export const MAP_W = 6000;
-export const MAP_H = 3000;
-export const TILE_SIZE = 5; // kept for legacy references
+// ── Map dimensions ─────────────────────────────────────────────────────────
+export const MAP_W = 10000;
+export const MAP_H = 10000;
+export const TILE_SIZE = 5;
 export const CHUNK_SIZE = 64;
-export const NUM_CHUNKS_X = Math.ceil(MAP_W / CHUNK_SIZE); // 32
-export const NUM_CHUNKS_Y = Math.ceil(MAP_H / CHUNK_SIZE); // 32
+export const NUM_CHUNKS_X = Math.ceil(MAP_W / CHUNK_SIZE);
+export const NUM_CHUNKS_Y = Math.ceil(MAP_H / CHUNK_SIZE);
 
-// Location coordinates spread across 2000×2000
-export const LOCATION_COORDS: Record<string, { x: number; y: number }> = {
-  ashenford:       { x: 950,  y: 1050 },
-  saltmoor:        { x: 280,  y: 630  },
-  ironhold:        { x: 680,  y: 360  },
-  thornwick:       { x: 1380, y: 1100 },
-  graygate:        { x: 620,  y: 880  },
-  dustfall:        { x: 1080, y: 480  },
-  crossroads:      { x: 800,  y: 780  },
-  marshend:        { x: 1620, y: 1380 },
-  badlands:        { x: 1520, y: 680  },
-  coldpeak:        { x: 480,  y: 180  },
-  ruins_of_aether: { x: 1780, y: 940  },
-  dawnhaven:       { x: 450,  y: 780  },
-  vaultkeep:       { x: 760,  y: 300  },
-  greenhollow:     { x: 1180, y: 900  },
-  tidewatch:       { x: 130,  y: 430  },
-  sundrift_port:   { x: 2250, y: 1500 },
-  salt_throne:     { x: 2700, y: 800  },
-  ember_crossing:  { x: 3100, y: 1200 },
-  canyon_veil:     { x: 3500, y: 1800 },
-  dust_oracle:     { x: 2900, y: 2300 },
-  tidegate_haven:  { x: 4300, y: 1400 },
-  ironvine_citadel:{ x: 4800, y: 600  },
-  mossdeep:        { x: 5300, y: 1900 },
-  ashflow_rim:     { x: 5700, y: 900  },
-  rootspire:       { x: 5100, y: 2600 },
+// ── Continents ─────────────────────────────────────────────────────────────
+export type ContinentId = 'auredia' | 'trivalen' | 'uloren';
+
+export interface Continent {
+  id: ContinentId;
+  name: string;
+  cx: number; cy: number; rx: number; ry: number;
+  loreBlurb: string;
+}
+
+export const CONTINENTS: Continent[] = [
+  { id: 'auredia',  name: 'Auredia',  cx: 2000, cy: 5000, rx: 1700, ry: 3600,
+    loreBlurb: 'The Grand Kingdom of Auredia. One crown, one banner, one road web.' },
+  { id: 'trivalen', name: 'Trivalen', cx: 5700, cy: 5000, rx: 1700, ry: 3700,
+    loreBlurb: 'Three kingdoms tear at each other across the contested plains.' },
+  { id: 'uloren',   name: 'Uloren',   cx: 9000, cy: 5000, rx: 900,  ry: 4000,
+    loreBlurb: 'Mist-shrouded and unmapped. Few who walk it return with a straight story.' },
+];
+
+export function continentAt(x: number, y: number): ContinentId | null {
+  for (const c of CONTINENTS) {
+    const dx = (x - c.cx) / c.rx, dy = (y - c.cy) / c.ry;
+    if (dx * dx + dy * dy < 1) return c.id;
+  }
+  return null;
+}
+
+// Landmass mask: 1 if land, 0 if sea. Uses ellipse + noise distortion.
+function landMask(x: number, y: number): number {
+  for (const c of CONTINENTS) {
+    const dx = (x - c.cx) / c.rx, dy = (y - c.cy) / c.ry;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    const edge = 1 + (fbm(x * 0.0008, y * 0.0008, 3) - 0.5) * 0.35;
+    if (d < edge) {
+      return Math.max(0, Math.min(1, (edge - d) / 0.2));
+    }
+  }
+  return 0;
+}
+
+// ── Kingdoms & settlements ─────────────────────────────────────────────────
+export type KingdomId =
+  | 'auredia'        // one kingdom on Auredia
+  | 'korrath' | 'vell' | 'sarnak'  // three on Trivalen
+  | 'none';
+
+export interface Kingdom {
+  id: KingdomId;
+  name: string;
+  continent: ContinentId;
+  capital: string;
+  color: string;        // banner color
+  secondary: string;    // secondary banner
+  motto: string;
+}
+
+export const KINGDOMS: Record<KingdomId, Kingdom> = {
+  auredia:  { id: 'auredia',  name: 'Kingdom of Auredia',    continent: 'auredia',  capital: 'highmarch', color: '#2a5fb0', secondary: '#e4c86a', motto: 'One crown, one realm.' },
+  korrath:  { id: 'korrath',  name: 'Kingdom of Korrath',    continent: 'trivalen', capital: 'korrath_keep', color: '#6a2a2a', secondary: '#c0a050', motto: 'The mountain does not yield.' },
+  vell:     { id: 'vell',     name: 'Kingdom of Vell',       continent: 'trivalen', capital: 'vell_harbor', color: '#2a7050', secondary: '#e8e0a0', motto: 'Grain feeds the sword.' },
+  sarnak:   { id: 'sarnak',   name: 'Sarnak Steppe-Lords',   continent: 'trivalen', capital: 'sarnak_hold', color: '#b07028', secondary: '#2a1810', motto: 'The wind follows the horse.' },
+  none:     { id: 'none',     name: 'Unclaimed',             continent: 'uloren',   capital: '', color: '#555', secondary: '#888', motto: '' },
 };
 
-export const CONTINENTS = [
-  {
-    id: 'aethermoor',
-    name: 'Aethermoor',
-    xMin: 0, xMax: 1999, yMin: 0, yMax: 2999,
-    dominantBiome: 'Temperate mixed (plains, forest, mountain)',
-    loreBlurb: 'The oldest inhabited continent. Seat of the collapsed Aetherik Empire. Six factions struggle over its bones.',
-  },
-  {
-    id: 'sundrift',
-    name: 'The Sundrift Expanse',
-    xMin: 2200, xMax: 3999, yMin: 0, yMax: 2999,
-    dominantBiome: 'Arid savanna, salt flats, desert canyons',
-    loreBlurb: 'A vast sun-scorched continent rich in rare minerals and buried Aetherik ruins. The Amber Compact finances most of the expeditions into its interior.',
-  },
-  {
-    id: 'verdant_reach',
-    name: 'The Verdant Reach',
-    xMin: 4200, xMax: 5999, yMin: 0, yMax: 2999,
-    dominantBiome: 'Dense rainforest, river networks, volcanic highlands',
-    loreBlurb: 'Largely uncharted. The Greenwarden Covenant claims spiritual authority over it but controls none of it. Indigenous city-states trade only by sea.',
-  },
-] as const;
+export type SettlementType = 'capital' | 'castle' | 'city' | 'town' | 'village' | 'ruins' | 'port' | 'camp';
+
+export interface Settlement {
+  id: string;
+  name: string;
+  type: SettlementType;
+  kingdom: KingdomId;
+  continent: ContinentId;
+  x: number; y: number;
+  garrison: number;
+  houseName?: string;
+  description: string;
+  hasMarket: boolean;
+  hasBountyBoard: boolean;
+  hasDock: boolean;
+  hasInn: boolean;
+}
+
+export const SETTLEMENTS: Settlement[] = [
+  // ═══ Auredia — The Grand Kingdom ═══════════════════════════════════════
+  { id: 'highmarch',       name: 'Highmarch',              type: 'capital', kingdom: 'auredia', continent: 'auredia', x: 2000, y: 4800, garrison: 400, houseName: 'House Auren', description: 'The royal capital. Four walled districts, a cathedral, and the Sun Throne.', hasMarket: true, hasBountyBoard: true, hasDock: false, hasInn: true },
+  { id: 'goldport',        name: 'Goldport',               type: 'port',    kingdom: 'auredia', continent: 'auredia', x: 700,  y: 5400, garrison: 80,  houseName: 'House Wavekeep', description: "Auredia's seaward gate. Boats depart for every coast.", hasMarket: true, hasBountyBoard: true, hasDock: true, hasInn: true },
+  { id: 'rivergate',       name: 'Rivergate',              type: 'town',    kingdom: 'auredia', continent: 'auredia', x: 1600, y: 5900, garrison: 40,  description: 'A bridge-town at the Alder crossing.', hasMarket: true, hasBountyBoard: false, hasDock: true, hasInn: true },
+  { id: 'oakenfield',      name: 'Oakenfield',             type: 'town',    kingdom: 'auredia', continent: 'auredia', x: 2500, y: 5500, garrison: 30,  description: 'Breadbasket town ringed by oak groves.', hasMarket: true, hasBountyBoard: false, hasDock: false, hasInn: true },
+  { id: 'stonehelm',       name: 'Castle Stonehelm',       type: 'castle',  kingdom: 'auredia', continent: 'auredia', x: 1200, y: 4200, garrison: 120, houseName: 'House Stonehelm', description: 'A grey fortress guarding the western pass.', hasMarket: false, hasBountyBoard: true, hasDock: false, hasInn: false },
+  { id: 'highwind',        name: 'Castle Highwind',        type: 'castle',  kingdom: 'auredia', continent: 'auredia', x: 2700, y: 4100, garrison: 110, houseName: 'House Highwind', description: 'A cliffside bastion overlooking the plains.', hasMarket: false, hasBountyBoard: true, hasDock: false, hasInn: false },
+  { id: 'brightvale',      name: 'Castle Brightvale',      type: 'castle',  kingdom: 'auredia', continent: 'auredia', x: 3200, y: 5200, garrison: 100, houseName: 'House Brightvale', description: 'Sun-banners on white stone. The eastern marches.', hasMarket: false, hasBountyBoard: true, hasDock: false, hasInn: false },
+  { id: 'ashenford',       name: 'Ashenford',              type: 'village', kingdom: 'auredia', continent: 'auredia', x: 2100, y: 6200, garrison: 6,   description: 'A farming village on the fertile plains.', hasMarket: true, hasBountyBoard: false, hasDock: false, hasInn: true },
+  { id: 'millbrook',       name: 'Millbrook',              type: 'village', kingdom: 'auredia', continent: 'auredia', x: 1500, y: 5100, garrison: 4, description: 'Three mills turn on the river.', hasMarket: false, hasBountyBoard: false, hasDock: false, hasInn: false },
+  { id: 'redleaf',         name: 'Redleaf',                type: 'village', kingdom: 'auredia', continent: 'auredia', x: 2900, y: 6000, garrison: 5, description: 'An autumn-colored hamlet under the maples.', hasMarket: false, hasBountyBoard: false, hasDock: false, hasInn: false },
+  { id: 'fairhollow',      name: 'Fairhollow',             type: 'village', kingdom: 'auredia', continent: 'auredia', x: 1900, y: 3800, garrison: 4, description: 'Ringed by stone walls older than the crown.', hasMarket: false, hasBountyBoard: false, hasDock: false, hasInn: false },
+  { id: 'greycrag',        name: 'Greycrag',               type: 'village', kingdom: 'auredia', continent: 'auredia', x: 900,  y: 4700, garrison: 6, description: 'A rocky village of stubborn quarriers.', hasMarket: false, hasBountyBoard: false, hasDock: false, hasInn: false },
+  { id: 'thistledown',     name: 'Thistledown',            type: 'village', kingdom: 'auredia', continent: 'auredia', x: 3300, y: 4400, garrison: 3, description: 'Sheep farmers and good wool.', hasMarket: false, hasBountyBoard: false, hasDock: false, hasInn: false },
+  { id: 'oldferry',        name: 'Oldferry',               type: 'village', kingdom: 'auredia', continent: 'auredia', x: 1200, y: 5800, garrison: 3, description: 'River ferry crossing. Nothing fancy.', hasMarket: false, hasBountyBoard: false, hasDock: true, hasInn: false },
+  { id: 'auren_ruins',     name: 'The Drowned Spires',     type: 'ruins',   kingdom: 'auredia', continent: 'auredia', x: 700,  y: 3400, garrison: 0, description: "Tilted towers half-sunk in a marsh. Older than the kingdom.", hasMarket: false, hasBountyBoard: false, hasDock: false, hasInn: false },
+
+  // ═══ Trivalen — The Warring Continent ═══════════════════════════════════
+  // Korrath (north, mountains)
+  { id: 'korrath_keep',    name: 'Korrath Keep',           type: 'capital', kingdom: 'korrath', continent: 'trivalen', x: 5700, y: 3000, garrison: 300, description: 'An iron-banded fortress carved into the grey peaks.', hasMarket: true, hasBountyBoard: true, hasDock: false, hasInn: true },
+  { id: 'iron_reach',      name: 'Iron Reach',             type: 'castle',  kingdom: 'korrath', continent: 'trivalen', x: 5200, y: 3700, garrison: 80,  description: 'Frontier castle of iron-mining banners.', hasMarket: false, hasBountyBoard: true, hasDock: false, hasInn: false },
+  { id: 'grimstone',       name: 'Grimstone',              type: 'castle',  kingdom: 'korrath', continent: 'trivalen', x: 6300, y: 3600, garrison: 75, description: "Korrath's eastern watch against Sarnak.", hasMarket: false, hasBountyBoard: true, hasDock: false, hasInn: false },
+  { id: 'blackvein',       name: 'Blackvein',              type: 'town',    kingdom: 'korrath', continent: 'trivalen', x: 5500, y: 2400, garrison: 30, description: 'A coal and iron town.', hasMarket: true, hasBountyBoard: false, hasDock: false, hasInn: true },
+  { id: 'coldhearth',      name: 'Coldhearth',             type: 'village', kingdom: 'korrath', continent: 'trivalen', x: 6000, y: 2700, garrison: 5, description: 'A tough mountain village.', hasMarket: false, hasBountyBoard: false, hasDock: false, hasInn: false },
+  { id: 'grayslope',       name: 'Grayslope',              type: 'village', kingdom: 'korrath', continent: 'trivalen', x: 5100, y: 3200, garrison: 4, description: 'Goats and granite.', hasMarket: false, hasBountyBoard: false, hasDock: false, hasInn: false },
+
+  // Vell (south, coast + grain)
+  { id: 'vell_harbor',     name: 'Vell Harbor',            type: 'capital', kingdom: 'vell',    continent: 'trivalen', x: 5100, y: 6800, garrison: 280, description: 'Sea-green banners over the Vell royal port.', hasMarket: true, hasBountyBoard: true, hasDock: true, hasInn: true },
+  { id: 'greenmarch',      name: 'Greenmarch',             type: 'castle',  kingdom: 'vell',    continent: 'trivalen', x: 5700, y: 6300, garrison: 90,  description: 'A grain-castle of the Vell marches.', hasMarket: false, hasBountyBoard: true, hasDock: false, hasInn: false },
+  { id: 'tidestone',       name: 'Tidestone',              type: 'castle',  kingdom: 'vell',    continent: 'trivalen', x: 4600, y: 6400, garrison: 80,  description: 'Coast-watch of Vell.', hasMarket: false, hasBountyBoard: true, hasDock: true, hasInn: false },
+  { id: 'wheatport',       name: 'Wheatport',              type: 'town',    kingdom: 'vell',    continent: 'trivalen', x: 5400, y: 7200, garrison: 35, description: 'Grain-barges and merchant ships.', hasMarket: true, hasBountyBoard: false, hasDock: true, hasInn: true },
+  { id: 'clearwater',      name: 'Clearwater',             type: 'village', kingdom: 'vell',    continent: 'trivalen', x: 4800, y: 7000, garrison: 4, description: 'A fishing village with clear well-water.', hasMarket: false, hasBountyBoard: false, hasDock: true, hasInn: false },
+  { id: 'goldfield',       name: 'Goldfield',              type: 'village', kingdom: 'vell',    continent: 'trivalen', x: 5900, y: 6900, garrison: 5, description: 'Endless wheat in high summer.', hasMarket: false, hasBountyBoard: false, hasDock: false, hasInn: false },
+
+  // Sarnak (east, steppe + cavalry)
+  { id: 'sarnak_hold',     name: 'Sarnak Hold',            type: 'capital', kingdom: 'sarnak',  continent: 'trivalen', x: 6800, y: 5000, garrison: 320, description: 'A hill-ringed cavalry capital. Horsehair banners.', hasMarket: true, hasBountyBoard: true, hasDock: false, hasInn: true },
+  { id: 'windspire',       name: 'Windspire',              type: 'castle',  kingdom: 'sarnak',  continent: 'trivalen', x: 6400, y: 4300, garrison: 85, description: 'A tall watchtower on the steppe.', hasMarket: false, hasBountyBoard: true, hasDock: false, hasInn: false },
+  { id: 'dustmere',        name: 'Dustmere',               type: 'castle',  kingdom: 'sarnak',  continent: 'trivalen', x: 7100, y: 5700, garrison: 75, description: 'Fortress of the southern horse-lords.', hasMarket: false, hasBountyBoard: true, hasDock: false, hasInn: false },
+  { id: 'redgrass',        name: 'Redgrass',               type: 'town',    kingdom: 'sarnak',  continent: 'trivalen', x: 6700, y: 5600, garrison: 30, description: 'Horse-market town on the red steppe.', hasMarket: true, hasBountyBoard: false, hasDock: false, hasInn: true },
+  { id: 'longwind',        name: 'Longwind',               type: 'village', kingdom: 'sarnak',  continent: 'trivalen', x: 7200, y: 4500, garrison: 5, description: 'A wind-swept steppe village.', hasMarket: false, hasBountyBoard: false, hasDock: false, hasInn: false },
+
+  // Contested middle
+  { id: 'ravenfall',       name: 'Ravenfall',              type: 'ruins',   kingdom: 'none',    continent: 'trivalen', x: 6000, y: 4700, garrison: 0, description: 'A burned castle, its banners torn between three crowns.', hasMarket: false, hasBountyBoard: false, hasDock: false, hasInn: false },
+  { id: 'old_bridge',      name: 'The Old Bridge',         type: 'camp',    kingdom: 'none',    continent: 'trivalen', x: 5800, y: 5200, garrison: 20, description: 'A bridge camp that changes hands by the season.', hasMarket: false, hasBountyBoard: false, hasDock: false, hasInn: true },
+  { id: 'battleplain',     name: 'Battleplain Barrows',    type: 'ruins',   kingdom: 'none',    continent: 'trivalen', x: 6100, y: 5400, garrison: 0, description: 'The burial mounds of three generations of war.', hasMarket: false, hasBountyBoard: false, hasDock: false, hasInn: false },
+
+  // ═══ Uloren — The Unexplored ═══════════════════════════════════════════
+  { id: 'mistward',        name: 'Mistward',               type: 'village', kingdom: 'none',    continent: 'uloren',   x: 8400, y: 4500, garrison: 3, description: 'The first village past the mist. Strangers stay one night.', hasMarket: true, hasBountyBoard: false, hasDock: true, hasInn: true },
+  { id: 'quiet_harbor',    name: 'Quiet Harbor',           type: 'port',    kingdom: 'none',    continent: 'uloren',   x: 8300, y: 5800, garrison: 4, description: 'A pale-stone dock built by no one living.', hasMarket: false, hasBountyBoard: false, hasDock: true, hasInn: false },
+  { id: 'thornfold',       name: 'Thornfold',              type: 'village', kingdom: 'none',    continent: 'uloren',   x: 9000, y: 3500, garrison: 2, description: 'Hemmed in by black thorns. Lanterns never go out.', hasMarket: false, hasBountyBoard: false, hasDock: false, hasInn: false },
+  { id: 'mossgate',        name: 'Mossgate',               type: 'village', kingdom: 'none',    continent: 'uloren',   x: 8700, y: 6400, garrison: 3, description: 'A village that grew up through a stone archway.', hasMarket: false, hasBountyBoard: false, hasDock: false, hasInn: false },
+  { id: 'silent_hold',     name: 'The Silent Hold',        type: 'village', kingdom: 'none',    continent: 'uloren',   x: 9300, y: 5000, garrison: 2, description: 'They speak only in whispers and only at noon.', hasMarket: false, hasBountyBoard: false, hasDock: false, hasInn: false },
+  { id: 'stonewake',       name: 'Stonewake',              type: 'village', kingdom: 'none',    continent: 'uloren',   x: 8900, y: 7400, garrison: 2, description: 'Built among standing stones that hum at dusk.', hasMarket: false, hasBountyBoard: false, hasDock: false, hasInn: false },
+  { id: 'grey_monoliths',  name: 'The Grey Monoliths',     type: 'ruins',   kingdom: 'none',    continent: 'uloren',   x: 9100, y: 4200, garrison: 0, description: 'Forty-nine stones in a spiral. The spiral turns.', hasMarket: false, hasBountyBoard: false, hasDock: false, hasInn: false },
+  { id: 'hollow_tree',     name: 'The Hollow Tree',        type: 'ruins',   kingdom: 'none',    continent: 'uloren',   x: 9400, y: 6500, garrison: 0, description: 'A tree the size of a cathedral, hollow inside. Something lives in it.', hasMarket: false, hasBountyBoard: false, hasDock: false, hasInn: false },
+];
+
+// Quick lookups
+export const SETTLEMENT_BY_ID: Record<string, Settlement> = Object.fromEntries(SETTLEMENTS.map(s => [s.id, s]));
+export const LOCATION_COORDS: Record<string, { x: number; y: number }> = Object.fromEntries(
+  SETTLEMENTS.map(s => [s.id, { x: s.x, y: s.y }])
+);
+
+// Dock coordinates for spawning boats
+export const DOCK_COORDS: { x: number; y: number; id: string }[] = SETTLEMENTS.filter(s => s.hasDock).map(s => ({ x: s.x, y: s.y, id: s.id }));
+
+// ── Roads ──────────────────────────────────────────────────────────────────
+// Auredia: dense network. Trivalen: per-kingdom + some contested. Uloren: none.
+export const ROAD_CONNECTIONS: [string, string][] = [
+  // Auredia core network
+  ['highmarch', 'goldport'], ['highmarch', 'oakenfield'], ['highmarch', 'rivergate'],
+  ['highmarch', 'stonehelm'], ['highmarch', 'highwind'], ['highmarch', 'brightvale'],
+  ['goldport', 'rivergate'], ['rivergate', 'oakenfield'], ['oakenfield', 'ashenford'],
+  ['oakenfield', 'redleaf'], ['oakenfield', 'brightvale'], ['stonehelm', 'greycrag'],
+  ['stonehelm', 'millbrook'], ['millbrook', 'highmarch'], ['highwind', 'fairhollow'],
+  ['brightvale', 'thistledown'], ['rivergate', 'oldferry'], ['oldferry', 'ashenford'],
+  // Korrath
+  ['korrath_keep', 'iron_reach'], ['korrath_keep', 'grimstone'], ['korrath_keep', 'blackvein'],
+  ['iron_reach', 'grayslope'], ['grimstone', 'coldhearth'], ['blackvein', 'coldhearth'],
+  // Vell
+  ['vell_harbor', 'greenmarch'], ['vell_harbor', 'tidestone'], ['vell_harbor', 'wheatport'],
+  ['greenmarch', 'goldfield'], ['tidestone', 'clearwater'], ['wheatport', 'goldfield'],
+  // Sarnak
+  ['sarnak_hold', 'windspire'], ['sarnak_hold', 'dustmere'], ['sarnak_hold', 'redgrass'],
+  ['windspire', 'longwind'], ['redgrass', 'dustmere'],
+  // Contested (partial roads)
+  ['iron_reach', 'old_bridge'], ['greenmarch', 'old_bridge'], ['windspire', 'old_bridge'],
+];
+
+// ── Lazy chunked tile generation ───────────────────────────────────────────
+const chunkCache = new Map<number, Uint8Array>();
+const MAX_CACHE = 1024;
+
+function baseTile(x: number, y: number): number {
+  const land = landMask(x, y);
+  if (land <= 0) return T.DEEP_WATER;
+  if (land < 0.12) return T.WATER;
+  if (land < 0.18) return T.SAND;
+
+  const cont = continentAt(x, y);
+  const elev = fbm(x * 0.0012, y * 0.0012, 4);
+  const moist = fbm(x * 0.0020 + 500, y * 0.0020 + 500, 3);
+  const rough = fbm(x * 0.004 + 900, y * 0.004 + 300, 3);
+
+  // Continent-specific biome biasing
+  if (cont === 'auredia') {
+    // Temperate: plains, oak forest, rivers, some hills
+    if (elev > 0.70) return T.MOUNTAIN;
+    if (elev > 0.60) return T.HILL;
+    if (moist > 0.62) return T.FOREST;
+    if (moist > 0.55) return T.GRASS;
+    return T.GRASS;
+  }
+  if (cont === 'trivalen') {
+    // Warring continent: mountains north, coastal south, steppe east
+    const ny = y - 5000;
+    if (ny < -1200 && elev > 0.55) return T.MOUNTAIN;
+    if (ny < -800 && elev > 0.50) return T.HILL;
+    if (ny > 1200 && moist > 0.55) return T.GRASS;
+    if (x > 6600 && elev < 0.55) return T.GRASS; // steppe
+    if (elev > 0.68) return T.MOUNTAIN;
+    if (elev > 0.58) return T.HILL;
+    if (moist > 0.60) return T.FOREST;
+    return T.GRASS;
+  }
+  if (cont === 'uloren') {
+    // Mystery: dense forest, swamp, cliffs
+    if (elev > 0.72) return T.MOUNTAIN;
+    if (elev > 0.60) return T.HILL;
+    if (moist > 0.70 && rough > 0.55) return T.SWAMP;
+    if (moist > 0.55) return T.DENSE_FOREST;
+    if (moist > 0.45) return T.FOREST;
+    return T.CLEARING;
+  }
+  return T.GRASS;
+}
+
+// Settlement stamping (fast spatial check)
+interface Stamp { x: number; y: number; r: number; tile: number; }
+const SETTLEMENT_STAMPS: Stamp[] = SETTLEMENTS.map(s => ({
+  x: s.x, y: s.y,
+  r: s.type === 'capital' ? 40 : s.type === 'city' ? 30 : s.type === 'castle' ? 22 : s.type === 'town' ? 18 : s.type === 'ruins' ? 15 : 12,
+  tile: s.type === 'ruins' ? T.RUINS : T.GRASS,
+}));
+
+function stampedTile(x: number, y: number, base: number): number {
+  for (const s of SETTLEMENT_STAMPS) {
+    const dx = x - s.x, dy = y - s.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < s.r * s.r) {
+      if (s.tile === T.RUINS) return T.RUINS;
+      // inner radius = paved/cleared
+      if (d2 < (s.r * 0.55) * (s.r * 0.55)) return T.ROAD;
+      return s.tile;
+    }
+  }
+  return base;
+}
+
+// Precomputed road bitmap along connection lines (thin corridor stored in a Set).
+const ROAD_TILES: Set<number> = (() => {
+  const s = new Set<number>();
+  const addLine = (x0: number, y0: number, x1: number, y1: number) => {
+    const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+    let err = dx - dy;
+    let x = x0, y = y0;
+    for (let i = 0; i < 20000; i++) {
+      s.add(y * MAP_W + x);
+      if (x === x1 && y === y1) break;
+      const e2 = 2 * err;
+      if (e2 > -dy) { err -= dy; x += sx; }
+      if (e2 < dx)  { err += dx; y += sy; }
+    }
+  };
+  for (const [a, b] of ROAD_CONNECTIONS) {
+    const ca = LOCATION_COORDS[a], cb = LOCATION_COORDS[b];
+    if (!ca || !cb) continue;
+    addLine(ca.x, ca.y, cb.x, cb.y);
+  }
+  return s;
+})();
+
+export function isRoadTile(x: number, y: number): boolean {
+  return ROAD_TILES.has(y * MAP_W + x);
+}
+
+export function getTile(x: number, y: number): number {
+  if (x < 0 || x >= MAP_W || y < 0 || y >= MAP_H) return T.DEEP_WATER;
+  // Road overlay (only on land)
+  const base = baseTile(x, y);
+  const stamped = stampedTile(x, y, base);
+  if (stamped === T.DEEP_WATER || stamped === T.WATER) return stamped;
+  if (ROAD_TILES.has(y * MAP_W + x)) return T.ROAD;
+  return stamped;
+}
+
+export function getChunk(cx: number, cy: number): Uint8Array {
+  const key = cy * NUM_CHUNKS_X + cx;
+  const cached = chunkCache.get(key);
+  if (cached) return cached;
+  const buf = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE);
+  const bx = cx * CHUNK_SIZE, by = cy * CHUNK_SIZE;
+  for (let ly = 0; ly < CHUNK_SIZE; ly++) {
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+      buf[ly * CHUNK_SIZE + lx] = getTile(bx + lx, by + ly);
+    }
+  }
+  if (chunkCache.size >= MAX_CACHE) {
+    // drop first entry
+    const first = chunkCache.keys().next().value;
+    if (first !== undefined) chunkCache.delete(first);
+  }
+  chunkCache.set(key, buf);
+  return buf;
+}
+
+export function invalidateChunks() { chunkCache.clear(); }
+
+// ── Walkability ────────────────────────────────────────────────────────────
+export function isWalkableCode(code: number): boolean {
+  return code !== T.DEEP_WATER && code !== T.WATER && code !== T.MOUNTAIN;
+}
+export function isWaterCode(code: number): boolean {
+  return code === T.DEEP_WATER || code === T.WATER;
+}
+export function isWalkable(tile: TileType): boolean {
+  return tile !== 'deep_water' && tile !== 'water' && tile !== 'mountain';
+}
+export function tileCodeToType(code: number): TileType {
+  return TILE_NAMES[code] ?? 'grass';
+}
 
 // ── Colour palettes ────────────────────────────────────────────────────────
-// Index matches T.* codes  (0-14)
 const HEX_PALETTES: Record<Season, string[]> = {
   thaw: [
     '#1a3a5c','#2a5a7c','#c4a86c','#5a7a4a',
     '#3a5a2a','#2a4a1a','#6a6a5a','#5a5a5a',
-    '#d0d8e0','#3a4a3a','#5a4a3a','#8a7a5a',
+    '#d0d8e0','#3a4a3a','#5a4a3a','#a89060',
     '#3a6a8c','#7a9a5a','#b8a060',
   ],
   summer: [
     '#1a3060','#2a5585','#d4b87c','#4a8a3a',
     '#2a6a1a','#1a5a0a','#7a7a5a','#6a6a6a',
-    '#e8e8f0','#2a5a2a','#6a5a4a','#9a8a5a',
+    '#e8e8f0','#2a5a2a','#6a5a4a','#b89060',
     '#2a5a90','#6aaa4a','#c8b070',
   ],
   harvest: [
     '#1a3050','#2a4a6a','#c4a05a','#8a7a3a',
     '#6a5a1a','#5a4a0a','#7a6a4a','#5a5050',
-    '#d0c8c0','#4a4a2a','#5a4030','#8a7040',
+    '#d0c8c0','#4a4a2a','#5a4030','#a87840',
     '#2a4a70','#9a8a3a','#a08030',
   ],
   dark: [
     '#0a1a30','#1a3050','#8a7a5a','#3a4a3a',
     '#2a3a2a','#1a2a1a','#4a4a4a','#3a3a3a',
-    '#c0c8d8','#2a2a2a','#3a3028','#5a5040',
+    '#c0c8d8','#2a2a2a','#3a3028','#6a5430',
     '#1a3a60','#4a5a3a','#6a5830',
   ],
 };
@@ -149,7 +411,6 @@ export const PARSED_PALETTES: Record<Season, [number, number, number][]> =
     return acc;
   }, {} as Record<Season, [number, number, number][]>);
 
-// Backward-compat helpers
 export function getTileColor(tile: TileType, season: Season): string {
   return HEX_PALETTES[season][TILE_NAMES.indexOf(tile)] ?? '#333';
 }
@@ -157,500 +418,14 @@ export function getRoadColor(season: Season): string {
   return HEX_PALETTES[season][T.ROAD];
 }
 
-// ── World objects (static medieval structures) ─────────────────────────────
-export type WorldObjectType =
-  | 'farm' | 'barn' | 'windmill' | 'watchtower' | 'dock' | 'bridge'
-  | 'campfire' | 'market_stall' | 'ruins_pillar' | 'stone_wall'
-  | 'stone_circle' | 'hut' | 'well' | 'shrine' | 'gate' | 'fence';
-
-export interface WorldObject {
-  x: number; y: number;
-  type: WorldObjectType;
-  variant: number;
-}
-
-// ── Ambient entities (animals + non-interactive NPCs) ──────────────────────
-export type AmbientEntityType =
-  | 'deer' | 'sheep' | 'wolf' | 'eagle' | 'rabbit' | 'fish'
-  | 'villager' | 'fisherman' | 'guard' | 'merchant' | 'traveler' | 'crow';
-
-export interface AmbientEntity {
-  x: number; y: number;
-  type: AmbientEntityType;
-  speed: number;
-  phase: number;
-  radius: number;
-}
-
-// ── Map interface ──────────────────────────────────────────────────────────
+// ── Legacy compatibility ───────────────────────────────────────────────────
+// Some older code calls generateWorldMap(); return a light facade.
 export interface WorldMap {
-  tiles: Uint8Array;   // flat: tiles[y * MAP_W + x] = tile code
-  roads: Uint8Array;   // flat: roads[y * MAP_W + x] = 1 if road
-  objects: WorldObject[];
-  entities: AmbientEntity[];
+  getTile: (x: number, y: number) => number;
+  getChunk: (cx: number, cy: number) => Uint8Array;
+  invalidate: () => void;
 }
 
-// ── Internal helpers ───────────────────────────────────────────────────────
-function setTile(tiles: Uint8Array, x: number, y: number, code: number) {
-  if (x >= 0 && x < MAP_W && y >= 0 && y < MAP_H) tiles[y * MAP_W + x] = code;
-}
-
-function bresenhamLine(x0: number, y0: number, x1: number, y1: number): [number, number][] {
-  const pts: [number, number][] = [];
-  const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
-  const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
-  let err = dx - dy;
-  for (;;) {
-    pts.push([x0, y0]);
-    if (x0 === x1 && y0 === y1) break;
-    const e2 = 2 * err;
-    if (e2 > -dy) { err -= dy; x0 += sx; }
-    if (e2 < dx)  { err += dx; y0 += sy; }
-  }
-  return pts;
-}
-
-const BIOME_INFLUENCE: Record<string, { code: number; radius: number }> = {
-  ashenford:       { code: T.GRASS,        radius: 55 },
-  saltmoor:        { code: T.SAND,         radius: 50 },
-  ironhold:        { code: T.MOUNTAIN,     radius: 55 },
-  thornwick:       { code: T.DENSE_FOREST, radius: 60 },
-  graygate:        { code: T.GRASS,        radius: 50 },
-  dustfall:        { code: T.RUINS,        radius: 45 },
-  crossroads:      { code: T.GRASS,        radius: 40 },
-  marshend:        { code: T.SWAMP,        radius: 60 },
-  badlands:        { code: T.HILL,         radius: 65 },
-  coldpeak:        { code: T.SNOW,         radius: 55 },
-  ruins_of_aether: { code: T.RUINS,        radius: 45 },
-  dawnhaven:       { code: T.FARM_FIELD,   radius: 40 },
-  vaultkeep:       { code: T.MOUNTAIN,     radius: 40 },
-  greenhollow:     { code: T.FOREST,       radius: 50 },
-  tidewatch:       { code: T.SAND,         radius: 35 },
-  sundrift_port:   { code: T.SAND,         radius: 50 },
-  salt_throne:     { code: T.SAND,         radius: 60 },
-  ember_crossing:  { code: T.HILL,         radius: 45 },
-  canyon_veil:     { code: T.HILL,         radius: 55 },
-  dust_oracle:     { code: T.RUINS,        radius: 40 },
-  tidegate_haven:  { code: T.FOREST,       radius: 55 },
-  ironvine_citadel:{ code: T.DENSE_FOREST, radius: 65 },
-  mossdeep:        { code: T.SWAMP,        radius: 55 },
-  ashflow_rim:     { code: T.MOUNTAIN,     radius: 50 },
-  rootspire:       { code: T.DENSE_FOREST, radius: 60 },
-};
-
-export const CONNECTIONS: [string, string][] = [
-  ['ashenford', 'thornwick'],  ['ashenford', 'saltmoor'],
-  ['ashenford', 'crossroads'], ['saltmoor', 'graygate'],
-  ['saltmoor', 'ironhold'],    ['ironhold', 'coldpeak'],
-  ['ironhold', 'crossroads'],  ['thornwick', 'marshend'],
-  ['thornwick', 'ruins_of_aether'], ['graygate', 'dustfall'],
-  ['graygate', 'crossroads'],  ['dustfall', 'badlands'],
-  ['marshend', 'badlands'],
-  ['dawnhaven', 'ashenford'], ['dawnhaven', 'saltmoor'],
-  ['vaultkeep', 'ironhold'], ['vaultkeep', 'crossroads'],
-  ['greenhollow', 'thornwick'], ['greenhollow', 'ashenford'],
-  ['tidewatch', 'saltmoor'],
-  ['saltmoor', 'sundrift_port'], ['tidewatch', 'sundrift_port'],
-  ['sundrift_port', 'salt_throne'], ['salt_throne', 'ember_crossing'],
-  ['ember_crossing', 'canyon_veil'], ['canyon_veil', 'dust_oracle'],
-  ['sundrift_port', 'tidegate_haven'], ['tidegate_haven', 'ironvine_citadel'],
-  ['ironvine_citadel', 'ashflow_rim'], ['ironvine_citadel', 'mossdeep'],
-  ['mossdeep', 'rootspire'],
-];
-
-// ── Main generation ────────────────────────────────────────────────────────
 export function generateWorldMap(): WorldMap {
-  const tiles = new Uint8Array(MAP_W * MAP_H);
-  const roads = new Uint8Array(MAP_W * MAP_H);
-  const objects: WorldObject[] = [];
-  const entities: AmbientEntity[] = [];
-
-  // ── 1. Base terrain via coarse FBM (faster: compute at 1/4 res, bilinear upsample)
-  const COARSE = 4;
-  const cW = Math.ceil(MAP_W / COARSE) + 2;
-  const cH = Math.ceil(MAP_H / COARSE) + 2;
-  const elev = new Float32Array(cW * cH);
-  const moist = new Float32Array(cW * cH);
-  const rough = new Float32Array(cW * cH);
-  for (let cy = 0; cy < cH; cy++) {
-    for (let cx = 0; cx < cW; cx++) {
-      const wx = cx * COARSE, wy = cy * COARSE;
-      elev[cy * cW + cx]  = fbm(wx * 0.0045, wy * 0.0045, 5);
-      moist[cy * cW + cx] = fbm(wx * 0.006 + 500, wy * 0.006 + 500, 4);
-      rough[cy * cW + cx] = fbm(wx * 0.018 + 200, wy * 0.018 + 900, 3);
-    }
-  }
-
-  for (let y = 0; y < MAP_H; y++) {
-    for (let x = 0; x < MAP_W; x++) {
-      const cx = x / COARSE, cy = y / COARSE;
-      const ix = Math.floor(cx), iy = Math.floor(cy);
-      const fx = cx - ix, fy = cy - iy;
-      const i00 = iy * cW + ix, i10 = i00 + 1, i01 = i00 + cW, i11 = i01 + 1;
-      const blerp = (a: Float32Array) =>
-        a[i00] + fx * (a[i10] - a[i00]) + fy * ((a[i01] + fx * (a[i11] - a[i01])) - (a[i00] + fx * (a[i10] - a[i00])));
-      const e = blerp(elev), m = blerp(moist), r = blerp(rough);
-
-      let code: number;
-      if      (e < 0.24) code = T.DEEP_WATER;
-      else if (e < 0.30) code = T.WATER;
-      else if (e < 0.34) code = T.SAND;
-      else if (e < 0.50) {
-        if      (m > 0.68 && r > 0.52) code = T.SWAMP;
-        else if (m > 0.62)             code = T.FOREST;
-        else                           code = T.GRASS;
-      }
-      else if (e < 0.62) {
-        if      (m > 0.60) code = T.DENSE_FOREST;
-        else if (r > 0.58) code = T.HILL;
-        else               code = T.FOREST;
-      }
-      else if (e < 0.73) code = T.HILL;
-      else if (e < 0.83) code = T.MOUNTAIN;
-      else               code = T.SNOW;
-
-      tiles[y * MAP_W + x] = code;
-    }
-  }
-
-  // ── 2. Northern snow cap
-  for (let y = 0; y < 160; y++) {
-    for (let x = 0; x < MAP_W; x++) {
-      const snowLine = 80 + hash(x * 5, y) * 80;
-      if (y < snowLine) {
-        const t = tiles[y * MAP_W + x];
-        if (t !== T.DEEP_WATER && t !== T.WATER) tiles[y * MAP_W + x] = T.SNOW;
-      }
-    }
-  }
-
-  // ── 3. Western coast (saltmoor)
-  for (let y = 0; y < MAP_H; y++) {
-    for (let x = 0; x < 90; x++) {
-      const sm = LOCATION_COORDS.saltmoor;
-      const noise = hash(x * 3 + 11, y * 2 + 7) * 25;
-      const coastLine = 40 + noise;
-      if (x < coastLine) {
-        tiles[y * MAP_W + x] = x < 25 ? T.DEEP_WATER : T.WATER;
-      }
-    }
-  }
-
-  // ── 4. Biome influence zones
-  // Force ocean straits between continents
-  for (let y = 0; y < MAP_H; y++) {
-    for (let x = 2000; x < 2200; x++) tiles[y * MAP_W + x] = T.DEEP_WATER;
-    for (let x = 4000; x < 4200; x++) tiles[y * MAP_W + x] = T.DEEP_WATER;
-  }
-
-  // ── 4. Biome influence zones
-  for (const [locId, inf] of Object.entries(BIOME_INFLUENCE)) {
-    const c = LOCATION_COORDS[locId];
-    if (!c) continue;
-    for (let dy = -inf.radius; dy <= inf.radius; dy++) {
-      for (let dx = -inf.radius; dx <= inf.radius; dx++) {
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > inf.radius) continue;
-        const tx = c.x + dx, ty = c.y + dy;
-        if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H) continue;
-        const strength = 1 - dist / inf.radius;
-        if (hash(tx * 7 + ty * 13, 999) < strength * 0.88) {
-          tiles[ty * MAP_W + tx] = inf.code;
-        }
-      }
-    }
-  }
-
-  // ── 5. Rivers (8 winding rivers)
-  const riverSources: { x: number; y: number; vx: number; vy: number }[] = [
-    { x: 480,  y: 0,    vx: 0,  vy: 1  },
-    { x: 1200, y: 0,    vx: 0,  vy: 1  },
-    { x: 0,    y: 600,  vx: 1,  vy: 0  },
-    { x: 0,    y: 1400, vx: 1,  vy: 0  },
-    { x: 1999, y: 500,  vx: -1, vy: 0  },
-    { x: 1999, y: 1200, vx: -1, vy: 0  },
-    { x: 750,  y: 1999, vx: 0,  vy: -1 },
-    { x: 1450, y: 1999, vx: 0,  vy: -1 },
-  ];
-  for (const src of riverSources) {
-    let rx = src.x, ry = src.y;
-    for (let i = 0; i < 1400; i++) {
-      if (rx < 0 || rx >= MAP_W || ry < 0 || ry >= MAP_H) break;
-      const idx = ry * MAP_W + rx;
-      tiles[idx] = T.RIVER;
-      // 2-tile wide
-      const side = src.vy !== 0 ? 1 : 0;
-      const sideY = src.vx !== 0 ? 1 : 0;
-      if (rx + side < MAP_W && ry + sideY < MAP_H) tiles[(ry + sideY) * MAP_W + (rx + side)] = T.RIVER;
-
-      const drift = hash(rx + i * 29, ry + i * 19);
-      const perpX = src.vy !== 0 ? (drift < 0.3 ? -1 : drift > 0.7 ? 1 : 0) : 0;
-      const perpY = src.vx !== 0 ? (drift < 0.3 ? -1 : drift > 0.7 ? 1 : 0) : 0;
-      rx += src.vx + perpX;
-      ry += src.vy + perpY;
-    }
-  }
-
-  // ── 6. Farm fields around agricultural villages
-  const farmVillages = ['ashenford', 'graygate', 'crossroads', 'thornwick'];
-  for (const v of farmVillages) {
-    const c = LOCATION_COORDS[v];
-    if (!c) continue;
-    for (let i = 0; i < 22; i++) {
-      const ang = hash(i * 7 + v.charCodeAt(0), i * 13) * Math.PI * 2;
-      const d = 25 + hash(i * 11, i * 17 + v.charCodeAt(1)) * 65;
-      const fx = Math.round(c.x + Math.cos(ang) * d);
-      const fy = Math.round(c.y + Math.sin(ang) * d);
-      const fw = 5 + Math.floor(hash(i, v.charCodeAt(0)) * 10);
-      const fh = 4 + Math.floor(hash(i + 100, v.charCodeAt(0)) * 7);
-      for (let dy = 0; dy < fh; dy++) {
-        for (let dx = 0; dx < fw; dx++) {
-          const tx = fx + dx, ty = fy + dy;
-          if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H) continue;
-          const t = tiles[ty * MAP_W + tx];
-          if (t === T.GRASS || t === T.CLEARING) tiles[ty * MAP_W + tx] = T.FARM_FIELD;
-        }
-      }
-    }
-  }
-
-  // ── 7. Clearings scattered through forests
-  for (let i = 0; i < 220; i++) {
-    const cx = Math.floor(hash(i * 37, 1234) * MAP_W);
-    const cy = Math.floor(hash(i * 53, 5678) * MAP_H);
-    const r = 5 + Math.floor(hash(i, 9999) * 9);
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
-        if (Math.sqrt(dx * dx + dy * dy) > r) continue;
-        const tx = cx + dx, ty = cy + dy;
-        if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H) continue;
-        const t = tiles[ty * MAP_W + tx];
-        if (t === T.FOREST || t === T.DENSE_FOREST || t === T.GRASS) {
-          tiles[ty * MAP_W + tx] = T.CLEARING;
-        }
-      }
-    }
-  }
-
-  // ── 8. Roads
-  for (const [a, b] of CONNECTIONS) {
-    const ca = LOCATION_COORDS[a], cb = LOCATION_COORDS[b];
-    if (!ca || !cb) continue;
-    for (const [px, py] of bresenhamLine(ca.x, ca.y, cb.x, cb.y)) {
-      if (px < 0 || px >= MAP_W || py < 0 || py >= MAP_H) continue;
-      const tile = tiles[py * MAP_W + px];
-      if (tile === T.DEEP_WATER || tile === T.WATER) continue;
-      roads[py * MAP_W + px] = 1;
-      if (hash(px, py) > 0.3 && py + 1 < MAP_H) {
-        const southTile = tiles[(py + 1) * MAP_W + px];
-        if (southTile !== T.DEEP_WATER && southTile !== T.WATER) roads[(py + 1) * MAP_W + px] = 1;
-      }
-      if (hash(px + 1, py) > 0.5 && px + 1 < MAP_W) {
-        const eastTile = tiles[py * MAP_W + (px + 1)];
-        if (eastTile !== T.DEEP_WATER && eastTile !== T.WATER) roads[py * MAP_W + (px + 1)] = 1;
-      }
-    }
-  }
-
-  // ── 9. World objects & ambient entities
-  generateObjects(tiles, roads, objects);
-  generateEntities(tiles, entities);
-
-  return { tiles, roads, objects, entities };
-}
-
-// ── Object placement ───────────────────────────────────────────────────────
-function generateObjects(tiles: Uint8Array, roads: Uint8Array, out: WorldObject[]) {
-  const push = (x: number, y: number, type: WorldObjectType, variant = 0) => {
-    if (x >= 0 && x < MAP_W && y >= 0 && y < MAP_H) out.push({ x, y, type, variant });
-  };
-
-  // Farms & barns around agricultural villages
-  for (const v of ['ashenford', 'graygate', 'crossroads'] as const) {
-    const c = LOCATION_COORDS[v];
-    if (!c) continue;
-    for (let i = 0; i < 14; i++) {
-      const ang = hash(i + v.length * 3, i * 7) * Math.PI * 2;
-      const d = 18 + hash(i * 3, i * 11 + v.charCodeAt(0)) * 55;
-      const ox = Math.round(c.x + Math.cos(ang) * d);
-      const oy = Math.round(c.y + Math.sin(ang) * d);
-      const t = tiles[oy * MAP_W + ox] ?? T.GRASS;
-      if (t === T.GRASS || t === T.FARM_FIELD || t === T.CLEARING) {
-        push(ox, oy, hash(i, v.charCodeAt(0)) > 0.6 ? 'barn' : 'farm', i % 4);
-      }
-    }
-  }
-
-  // Huts & wells at every settlement
-  for (const [id, c] of Object.entries(LOCATION_COORDS)) {
-    push(c.x + 2, c.y + 2, 'well', 0);
-
-    if (['ashenford', 'crossroads', 'thornwick', 'marshend'].includes(id)) {
-      for (let i = 0; i < 10; i++) {
-        const ang = hash(i * 9, id.charCodeAt(0)) * Math.PI * 2;
-        const d = 8 + hash(i, id.charCodeAt(1)) * 28;
-        push(Math.round(c.x + Math.cos(ang) * d), Math.round(c.y + Math.sin(ang) * d), 'hut', i % 4);
-      }
-      // Fence ring around village
-      for (let i = 0; i < 20; i++) {
-        const ang = (i / 20) * Math.PI * 2;
-        push(Math.round(c.x + Math.cos(ang) * 35), Math.round(c.y + Math.sin(ang) * 35), 'fence', i % 2);
-      }
-    }
-
-    // Market stalls at trade cities
-    if (['graygate', 'saltmoor'].includes(id)) {
-      for (let i = 0; i < 8; i++) {
-        const ang = hash(i * 5, id.charCodeAt(0)) * Math.PI * 2;
-        const d = 6 + hash(i * 7, id.charCodeAt(1)) * 18;
-        push(Math.round(c.x + Math.cos(ang) * d), Math.round(c.y + Math.sin(ang) * d), 'market_stall', i % 4);
-      }
-    }
-
-    // Ruins at dustfall & ruins_of_aether
-    if (['dustfall', 'ruins_of_aether'].includes(id)) {
-      for (let i = 0; i < 20; i++) {
-        const ang = hash(i * 11, id.charCodeAt(0)) * Math.PI * 2;
-        const d = 6 + hash(i * 13, id.charCodeAt(1)) * 40;
-        push(Math.round(c.x + Math.cos(ang) * d), Math.round(c.y + Math.sin(ang) * d), 'ruins_pillar', i % 4);
-      }
-      // Stone circle
-      for (let i = 0; i < 10; i++) {
-        const ang = (i / 10) * Math.PI * 2;
-        push(Math.round(c.x + Math.cos(ang) * 14), Math.round(c.y + Math.sin(ang) * 14), 'stone_circle', i % 2);
-      }
-      push(c.x, c.y - 6, 'shrine', 0);
-    }
-
-    // Watchtowers + stone walls at fortresses
-    if (['ironhold', 'coldpeak'].includes(id)) {
-      for (let i = 0; i < 4; i++) {
-        const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
-        push(Math.round(c.x + Math.cos(ang) * 22), Math.round(c.y + Math.sin(ang) * 22), 'watchtower', i % 2);
-      }
-      for (let i = 0; i < 28; i++) {
-        const ang = (i / 28) * Math.PI * 2;
-        push(Math.round(c.x + Math.cos(ang) * 17), Math.round(c.y + Math.sin(ang) * 17), 'stone_wall', i % 4);
-      }
-      push(c.x, c.y + 18, 'gate', id === 'coldpeak' ? 1 : 0);
-    }
-
-    // Docks at coastal saltmoor
-    if (id === 'saltmoor') {
-      for (let i = 0; i < 6; i++) {
-        push(c.x - 18 + i * 5, c.y + 6 + i * 2, 'dock', i % 3);
-      }
-    }
-
-    // Shrine at arcane locations
-    if (['coldpeak', 'ruins_of_aether'].includes(id)) {
-      push(c.x + 8, c.y - 8, 'shrine', 1);
-    }
-  }
-
-  // Windmills on hills near villages
-  for (const v of ['ashenford', 'graygate'] as const) {
-    const c = LOCATION_COORDS[v];
-    if (!c) continue;
-    for (let i = 0; i < 4; i++) {
-      const ang = hash(i * 17, v.charCodeAt(0) + 60) * Math.PI * 2;
-      const d = 35 + hash(i * 23, v.charCodeAt(1)) * 70;
-      push(Math.round(c.x + Math.cos(ang) * d), Math.round(c.y + Math.sin(ang) * d), 'windmill', i % 2);
-    }
-  }
-
-  // Campfires along roads
-  for (let i = 0; i < 50; i++) {
-    const cx = Math.floor(hash(i * 97, 4321) * MAP_W);
-    const cy = Math.floor(hash(i * 113, 8765) * MAP_H);
-    if (cx < MAP_W && cy < MAP_H && roads[cy * MAP_W + cx] === 1) {
-      push(cx, cy, 'campfire', 0);
-    }
-  }
-}
-
-// ── Entity placement ───────────────────────────────────────────────────────
-function generateEntities(tiles: Uint8Array, out: AmbientEntity[]) {
-  const spawn = (x: number, y: number, type: AmbientEntityType, speed: number, phase: number, radius: number) => {
-    if (x >= 0 && x < MAP_W && y >= 0 && y < MAP_H) out.push({ x, y, type, speed, phase, radius });
-  };
-
-  const sample = (n: number, seed1: number, seed2: number, validCodes: number[],
-                  type: AmbientEntityType, speed: [number, number], radius: number) => {
-    for (let i = 0; i < n; i++) {
-      const x = Math.floor(hash(i * seed1, 100 + seed2) * MAP_W);
-      const y = Math.floor(hash(i * seed2, 200 + seed1) * MAP_H);
-      if (x >= MAP_W || y >= MAP_H) continue;
-      if (validCodes.includes(tiles[y * MAP_W + x])) {
-        spawn(x, y, type,
-          speed[0] + hash(i, seed1 + seed2) * (speed[1] - speed[0]),
-          hash(i * 17, seed1) * Math.PI * 2,
-          radius);
-      }
-    }
-  };
-
-  sample(100, 7,  11,  [T.FOREST, T.CLEARING],       'deer',     [0.25, 0.55], 10);
-  sample(40,  19, 23,  [T.DENSE_FOREST],              'wolf',     [0.40, 0.80], 14);
-  sample(80,  31, 37,  [T.GRASS, T.FARM_FIELD, T.CLEARING], 'sheep', [0.08, 0.22], 6);
-  sample(60,  43, 47,  [T.CLEARING, T.GRASS],         'rabbit',   [0.70, 1.20], 5);
-  sample(20,  59, 61,  [T.MOUNTAIN, T.SNOW, T.HILL],  'eagle',    [0.50, 0.90], 24);
-  sample(55,  71, 73,  [T.RIVER, T.WATER],            'fish',     [0.30, 0.60], 7);
-  sample(30,  83, 89,  [T.FOREST, T.CLEARING, T.HILL],'crow',     [0.60, 1.00], 18);
-
-  // Villagers at settlements
-  for (const v of ['ashenford', 'graygate', 'crossroads', 'thornwick', 'marshend', 'saltmoor']) {
-    const c = LOCATION_COORDS[v];
-    if (!c) continue;
-    for (let i = 0; i < 10; i++) {
-      spawn(
-        c.x + Math.round((hash(i * 3, v.charCodeAt(0)) - 0.5) * 40),
-        c.y + Math.round((hash(i * 7, v.charCodeAt(1)) - 0.5) * 40),
-        'villager', 0.12 + hash(i, v.charCodeAt(0) + 50) * 0.18,
-        hash(i * 11, v.charCodeAt(0)) * Math.PI * 2, 12,
-      );
-    }
-  }
-
-  // Fishermen near water
-  sample(25, 83, 97, [T.SAND, T.RIVER], 'fisherman', [0.03, 0.07], 4);
-
-  // Guards at fortresses
-  for (const f of ['ironhold', 'coldpeak']) {
-    const c = LOCATION_COORDS[f];
-    if (!c) continue;
-    for (let i = 0; i < 8; i++) {
-      const ang = (i / 8) * Math.PI * 2;
-      spawn(Math.round(c.x + Math.cos(ang) * 20), Math.round(c.y + Math.sin(ang) * 20),
-        'guard', 0.18, ang, 6);
-    }
-  }
-
-  // Merchants & travelers on roads
-  for (let i = 0; i < 30; i++) {
-    const [a, b] = CONNECTIONS[i % CONNECTIONS.length];
-    const ca = LOCATION_COORDS[a], cb = LOCATION_COORDS[b];
-    if (!ca || !cb) continue;
-    const t = hash(i * 101, 2828);
-    spawn(
-      Math.round(ca.x + (cb.x - ca.x) * t),
-      Math.round(ca.y + (cb.y - ca.y) * t),
-      hash(i, 2929) > 0.5 ? 'merchant' : 'traveler',
-      0.10 + hash(i, 3030) * 0.22,
-      hash(i * 103, 3131) * Math.PI * 2, 35,
-    );
-  }
-}
-
-// ── Walkability ────────────────────────────────────────────────────────────
-export function isWalkable(tile: TileType): boolean {
-  return tile !== 'deep_water' && tile !== 'water' && tile !== 'mountain';
-}
-
-export function isWalkableCode(code: number): boolean {
-  return code !== T.DEEP_WATER && code !== T.WATER && code !== T.MOUNTAIN;
-}
-
-export function tileCodeToType(code: number): TileType {
-  return TILE_NAMES[code] ?? 'grass';
+  return { getTile, getChunk, invalidate: invalidateChunks };
 }
