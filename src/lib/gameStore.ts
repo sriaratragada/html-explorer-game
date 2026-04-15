@@ -1,11 +1,11 @@
 import { create } from 'zustand';
-import { GameState, Season, ChronicleEntry, Reputation, FactionStanding, OverlayType, TutorialStep, EnvironmentAction } from './gameTypes';
+import { GameState, Season, ChronicleEntry, Reputation, FactionStanding, OverlayType, TutorialStep, EnvironmentAction, HotbarItem } from './gameTypes';
 import { INITIAL_NPCS, generateEvents, getWorldEvent, getPlayerTitle, ENVIRONMENT_ACTIONS } from './gameData';
-import { LOCATION_COORDS, isWalkable, generateWorldMap, WorldMap as WorldMapData } from './mapGenerator';
+import { LOCATION_COORDS, isWalkableCode, generateWorldMap, WorldMap as WorldMapData, MAP_W, MAP_H } from './mapGenerator';
 
 const SEASON_ORDER: Season[] = ['thaw', 'summer', 'harvest', 'dark'];
 const TICKS_PER_SEASON = 12;
-const PROXIMITY_RADIUS = 12;
+const PROXIMITY_RADIUS = 30;
 
 let cachedMap: WorldMapData | null = null;
 export function getMap(): WorldMapData {
@@ -26,8 +26,18 @@ function findNearestLocation(px: number, py: number): string | null {
   return nearest;
 }
 
+const STARTER_HOTBAR: HotbarItem[] = [
+  { id: 'bare_hands',   name: 'Bare Hands',    icon: '✊', quantity: 1, type: 'tool',    description: 'All you have. For now.' },
+  { id: 'rusty_knife',  name: 'Rusty Knife',   icon: '🗡️', quantity: 1, type: 'weapon',  description: 'A worn blade. Better than nothing.' },
+  { id: 'flint_steel',  name: 'Flint & Steel', icon: '🔥', quantity: 1, type: 'tool',    description: 'Start fires. Signal for help.' },
+  { id: 'waterskin',    name: 'Waterskin',     icon: '🫗', quantity: 1, type: 'misc',    description: 'Empty. Find a river.' },
+  { id: 'trail_ration', name: 'Trail Rations', icon: '🍖', quantity: 3, type: 'food',    description: 'Dried meat. Enough for a few days.' },
+  { id: 'empty',        name: '',              icon: '',   quantity: 0, type: 'misc',    description: '' },
+];
+
 interface GameStore extends GameState {
   startGame: () => void;
+  setActiveSlot: (slot: number) => void;
   travel: (locationId: string) => void;
   movePlayer: (dx: number, dy: number) => void;
   makeChoice: (choiceId: string) => void;
@@ -43,6 +53,8 @@ interface GameStore extends GameState {
 export const useGameStore = create<GameStore>((set, get) => ({
   phase: 'title',
   isMoving: false,
+  hotbar: STARTER_HOTBAR,
+  activeSlot: 0,
   tick: 0,
   season: 'thaw',
   seasonTick: 0,
@@ -93,8 +105,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       overlay: 'none',
       tutorialStep: 'movement',
       environmentCooldowns: {},
+      hotbar: STARTER_HOTBAR,
+      activeSlot: 0,
     });
   },
+
+  setActiveSlot: (slot: number) => set({ activeSlot: slot }),
 
   movePlayer: (dx: number, dy: number) => {
     const state = get();
@@ -104,8 +120,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const nx = state.playerX + dx;
     const ny = state.playerY + dy;
     
-    if (nx < 0 || nx >= 800 || ny < 0 || ny >= 800) return;
-    if (!isWalkable(map.tiles[ny][nx])) return;
+    if (nx < 0 || nx >= MAP_W || ny < 0 || ny >= MAP_H) return;
+    if (!isWalkableCode(map.tiles[ny * MAP_W + nx])) return;
 
     const nearest = findNearestLocation(nx, ny);
     const newChronicle: ChronicleEntry[] = [];

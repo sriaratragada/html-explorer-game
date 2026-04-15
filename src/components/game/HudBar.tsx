@@ -1,7 +1,6 @@
 import { useGameStore } from '@/lib/gameStore';
 import { SEASON_NAMES, SEASON_ICONS, REP_LABELS, LOCATIONS, ENVIRONMENT_ACTIONS } from '@/lib/gameData';
-import { LOCATION_COORDS } from '@/lib/mapGenerator';
-import { TileType } from '@/lib/mapGenerator';
+import { LOCATION_COORDS, TileType, TILE_NAMES, MAP_W } from '@/lib/mapGenerator';
 import { getMap } from '@/lib/gameStore';
 
 export default function HudBar() {
@@ -20,8 +19,9 @@ export default function HudBar() {
 
   // Get current terrain for environment actions
   const map = getMap();
-  const currentTile: TileType = (playerY >= 0 && playerY < 800 && playerX >= 0 && playerX < 800)
-    ? map.tiles[playerY][playerX] : 'grass';
+  const currentTile: TileType = (playerX >= 0 && playerX < MAP_W && playerY >= 0 && playerY < MAP_W)
+    ? (TILE_NAMES[map.tiles[playerY * MAP_W + playerX]] ?? 'grass')
+    : 'grass';
 
   const availableActions = ENVIRONMENT_ACTIONS.filter(a =>
     a.terrain === currentTile && (!environmentCooldowns[a.id] || tick >= environmentCooldowns[a.id])

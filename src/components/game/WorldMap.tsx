@@ -1,222 +1,896 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useLayoutEffect, useCallback } from 'react';
 import { useGameStore, getMap } from '@/lib/gameStore';
-import { MAP_W, MAP_H, TILE_SIZE, LOCATION_COORDS, getTileColor, getRoadColor } from '@/lib/mapGenerator';
+import {
+  MAP_W, MAP_H, CHUNK_SIZE, NUM_CHUNKS_X, NUM_CHUNKS_Y,
+  LOCATION_COORDS, PARSED_PALETTES,
+  WorldObject, AmbientEntity,
+  WorldObjectType, AmbientEntityType,
+} from '@/lib/mapGenerator';
 import { LOCATIONS } from '@/lib/gameData';
+import { Season } from '@/lib/gameTypes';
 
+// ── Location icons ─────────────────────────────────────────────────────────
 const LOC_ICONS: Record<string, string> = {
   ashenford: '🏘️', saltmoor: '🏙️', ironhold: '🏰', thornwick: '🌲',
   graygate: '🏛️', dustfall: '🗿', crossroads: '🍺', marshend: '🌿',
   badlands: '💀', coldpeak: '⛰️', ruins_of_aether: '✨',
 };
 
+// ── Object colours (r,g,b) for fast lookup ─────────────────────────────────
+const OBJ_COLORS: Record<WorldObjectType, [number, number, number]> = {
+  farm:         [160, 120,  60],
+  barn:         [140,  80,  40],
+  windmill:     [200, 180, 140],
+  watchtower:   [ 90,  90,  90],
+  dock:         [100,  70,  40],
+  bridge:       [160, 140,  90],
+  campfire:     [220, 120,  30],
+  market_stall: [180, 140,  60],
+  ruins_pillar: [130, 120, 100],
+  stone_wall:   [110, 110, 105],
+  stone_circle: [140, 135, 120],
+  hut:          [150, 110,  70],
+  well:         [100,  90,  80],
+  shrine:       [210, 190, 130],
+  gate:         [ 80,  75,  65],
+  fence:        [170, 140,  90],
+};
+
+// ── Entity colours ─────────────────────────────────────────────────────────
+const ENTITY_COLORS: Record<AmbientEntityType, string> = {
+  deer:      '#a07850',
+  sheep:     '#e8e4d8',
+  wolf:      '#606060',
+  eagle:     '#705030',
+  rabbit:    '#d0c8b0',
+  fish:      '#5090c0',
+  crow:      '#303038',
+  villager:  '#c8a870',
+  fisherman: '#7090a0',
+  guard:     '#808878',
+  merchant:  '#c0904a',
+  traveler:  '#a09070',
+};
+
+// ── Chunk baking ───────────────────────────────────────────────────────────
+function bakeChunk(
+  chunkX: number, chunkY: number,
+  tiles: Uint8Array, roads: Uint8Array,
+  season: Season,
+): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = CHUNK_SIZE; c.height = CHUNK_SIZE;
+  const ctx = c.getContext('2d')!;
+  const img = ctx.createImageData(CHUNK_SIZE, CHUNK_SIZE);
+  const d = img.data;
+  const pal = PARSED_PALETTES[season];
+
+  for (let ty = 0; ty < CHUNK_SIZE; ty++) {
+    for (let tx = 0; tx < CHUNK_SIZE; tx++) {
+      const wx = chunkX * CHUNK_SIZE + tx;
+      const wy = chunkY * CHUNK_SIZE + ty;
+      if (wx >= MAP_W || wy >= MAP_H) continue;
+      const mapIdx = wy * MAP_W + wx;
+      const isRoad = roads[mapIdx] === 1;
+      const code = isRoad ? 11 : tiles[mapIdx]; // 11 = ROAD
+      const [r, g, b] = pal[code] ?? [50, 50, 50];
+
+      // Subtle variation per tile for texture
+      const v = ((wx * 3 + wy * 7) ^ (wx ^ wy)) & 0x07;
+      const pix = (ty * CHUNK_SIZE + tx) * 4;
+      d[pix]     = Math.min(255, r + v - 3);
+      d[pix + 1] = Math.min(255, g + v - 3);
+      d[pix + 2] = Math.min(255, b + v - 3);
+      d[pix + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+// ── Object rendering ───────────────────────────────────────────────────────
+function drawObject(
+  ctx: CanvasRenderingContext2D,
+  obj: WorldObject, sx: number, sy: number,
+  zoom: number, time: number,
+) {
+  const z = zoom;
+  const [r, g, b] = OBJ_COLORS[obj.type] ?? [150, 150, 150];
+  const col = `rgb(${r},${g},${b})`;
+
+  if (z < 5) {
+    // tiny dot
+    ctx.fillStyle = col;
+    ctx.fillRect(sx - 1, sy - 1, 2, 2);
+    return;
+  }
+
+  ctx.save();
+  ctx.translate(sx, sy);
+
+  switch (obj.type) {
+    case 'hut':
+    case 'farm': {
+      // body
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 1.2, -z * 0.7, z * 2.4, z * 1.4);
+      // roof triangle
+      ctx.fillStyle = `rgb(${Math.max(0, r - 40)},${Math.max(0, g - 30)},${Math.max(0, b - 20)})`;
+      ctx.beginPath();
+      ctx.moveTo(-z * 1.5, -z * 0.7);
+      ctx.lineTo(0, -z * 2.0);
+      ctx.lineTo(z * 1.5, -z * 0.7);
+      ctx.closePath();
+      ctx.fill();
+      // door
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(-z * 0.3, z * 0.1, z * 0.6, z * 0.6);
+      break;
+    }
+    case 'barn': {
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 1.8, -z * 1.0, z * 3.6, z * 2.0);
+      ctx.fillStyle = `rgb(${Math.max(0, r - 50)},${Math.max(0, g - 30)},${Math.max(0, b - 10)})`;
+      ctx.beginPath();
+      ctx.moveTo(-z * 2.0, -z * 1.0);
+      ctx.lineTo(0, -z * 2.5);
+      ctx.lineTo(z * 2.0, -z * 1.0);
+      ctx.closePath();
+      ctx.fill();
+      // X on barn door
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      ctx.lineWidth = z * 0.15;
+      ctx.beginPath();
+      ctx.moveTo(-z * 0.8, z * 1.0); ctx.lineTo(z * 0.8, -z * 0.2);
+      ctx.moveTo(z * 0.8, z * 1.0); ctx.lineTo(-z * 0.8, -z * 0.2);
+      ctx.stroke();
+      break;
+    }
+    case 'windmill': {
+      const spin = time * 0.0008 * (1 + obj.variant * 0.3);
+      // base tower
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 0.5, -z * 2.0, z, z * 2.5);
+      // sails
+      ctx.strokeStyle = `rgb(${Math.max(0, r - 20)},${Math.max(0, g - 20)},${Math.max(0, b + 10)})`;
+      ctx.lineWidth = z * 0.5;
+      for (let i = 0; i < 4; i++) {
+        const a = spin + (i / 4) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(0, -z * 1.5);
+        ctx.lineTo(Math.cos(a) * z * 2.2, -z * 1.5 + Math.sin(a) * z * 2.2);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'watchtower': {
+      // tower body
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 0.9, -z * 3.0, z * 1.8, z * 3.5);
+      // battlements
+      ctx.fillStyle = `rgb(${Math.max(0, r - 15)},${Math.max(0, g - 15)},${Math.max(0, b - 10)})`;
+      for (let i = 0; i < 3; i++) {
+        ctx.fillRect(-z * 0.9 + i * z * 0.7, -z * 3.6, z * 0.45, z * 0.6);
+      }
+      // arrow slit
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(-z * 0.12, -z * 2.0, z * 0.24, z * 0.6);
+      break;
+    }
+    case 'stone_wall': {
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 0.6, -z * 0.5, z * 1.2, z * 1.0);
+      ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(-z * 0.6, -z * 0.5, z * 1.2, z * 1.0);
+      break;
+    }
+    case 'market_stall': {
+      // awning
+      const awningCol = ['#e05050', '#50a050', '#5050e0', '#e0a020'][obj.variant % 4];
+      ctx.fillStyle = awningCol;
+      ctx.fillRect(-z * 1.6, -z * 1.8, z * 3.2, z * 0.5);
+      // table
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 1.4, -z * 1.3, z * 2.8, z * 1.0);
+      // legs
+      ctx.fillStyle = `rgb(${Math.max(0, r - 40)},${Math.max(0, g - 30)},${Math.max(0, b - 20)})`;
+      ctx.fillRect(-z * 1.2, -z * 0.3, z * 0.25, z * 0.6);
+      ctx.fillRect(z * 0.95, -z * 0.3, z * 0.25, z * 0.6);
+      break;
+    }
+    case 'ruins_pillar': {
+      const h = z * (1.5 + (obj.variant % 3) * 0.8);
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 0.5, -h, z, h);
+      // crumble top
+      ctx.fillStyle = `rgb(${Math.max(0, r - 20)},${Math.max(0, g - 15)},${Math.max(0, b - 10)})`;
+      ctx.fillRect(-z * 0.6, -h - z * 0.3, z * 0.4, z * 0.3);
+      ctx.fillRect(z * 0.2, -h - z * 0.5, z * 0.4, z * 0.5);
+      break;
+    }
+    case 'stone_circle': {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = z * 0.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, z * 0.8, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    }
+    case 'well': {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = z * 0.4;
+      ctx.beginPath();
+      ctx.arc(0, 0, z * 1.0, 0, Math.PI * 2);
+      ctx.stroke();
+      // cross beam
+      ctx.strokeStyle = `rgb(${Math.max(0, r - 30)},${Math.max(0, g - 20)},${Math.max(0, b)})`;
+      ctx.lineWidth = z * 0.3;
+      ctx.beginPath();
+      ctx.moveTo(-z, -z * 0.8); ctx.lineTo(z, -z * 0.8);
+      ctx.stroke();
+      break;
+    }
+    case 'campfire': {
+      const flicker = 0.7 + Math.sin(time * 0.005 + obj.variant) * 0.3;
+      // glow
+      const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, z * 2.5 * flicker);
+      grd.addColorStop(0, 'rgba(255,180,50,0.6)');
+      grd.addColorStop(1, 'rgba(255,80,10,0)');
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.arc(0, 0, z * 2.5 * flicker, 0, Math.PI * 2);
+      ctx.fill();
+      // logs
+      ctx.fillStyle = '#5a3a1a';
+      ctx.fillRect(-z * 0.9, z * 0.2, z * 0.5, z * 0.3);
+      ctx.fillRect(z * 0.4, z * 0.2, z * 0.5, z * 0.3);
+      // flame
+      ctx.fillStyle = `rgba(255,${Math.round(120 + flicker * 80)},30,0.9)`;
+      ctx.beginPath();
+      ctx.ellipse(0, -z * 0.6 * flicker, z * 0.5, z * 0.9 * flicker, 0, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'dock': {
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 0.4, -z * 2.5, z * 0.8, z * 3.0);
+      // planks
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+      ctx.lineWidth = 0.5;
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(-z * 0.4, -z * 2.0 + i * z * 0.7);
+        ctx.lineTo(z * 0.4, -z * 2.0 + i * z * 0.7);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'shrine': {
+      // upright cross
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 0.25, -z * 2.0, z * 0.5, z * 2.5);
+      ctx.fillRect(-z * 0.9, -z * 1.4, z * 1.8, z * 0.45);
+      break;
+    }
+    case 'gate': {
+      const gateCol = `rgb(${r},${g},${b})`;
+      ctx.fillStyle = gateCol;
+      ctx.fillRect(-z * 2.0, -z * 2.5, z * 1.0, z * 2.5);
+      ctx.fillRect(z * 1.0, -z * 2.5, z * 1.0, z * 2.5);
+      // arch
+      ctx.strokeStyle = gateCol;
+      ctx.lineWidth = z * 0.8;
+      ctx.beginPath();
+      ctx.arc(0, -z * 2.5, z * 1.5, Math.PI, 0, false);
+      ctx.stroke();
+      break;
+    }
+    case 'fence': {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = z * 0.3;
+      ctx.beginPath();
+      ctx.moveTo(-z * 0.8, z * 0.2); ctx.lineTo(-z * 0.8, -z * 0.8);
+      ctx.moveTo(z * 0.8, z * 0.2);  ctx.lineTo(z * 0.8, -z * 0.8);
+      ctx.moveTo(-z * 0.8, -z * 0.35); ctx.lineTo(z * 0.8, -z * 0.35);
+      ctx.stroke();
+      break;
+    }
+    default:
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 0.7, -z * 0.7, z * 1.4, z * 1.4);
+  }
+
+  ctx.restore();
+}
+
+// ── Entity rendering ───────────────────────────────────────────────────────
+function drawEntity(
+  ctx: CanvasRenderingContext2D,
+  entity: AmbientEntity, sx: number, sy: number,
+  zoom: number,
+) {
+  const col = ENTITY_COLORS[entity.type] ?? '#aaa';
+  const z = zoom;
+
+  if (z < 5) {
+    ctx.fillStyle = col;
+    ctx.fillRect(sx - 1, sy - 1, 2, 2);
+    return;
+  }
+
+  ctx.save();
+  ctx.translate(sx, sy);
+
+  switch (entity.type) {
+    case 'deer': {
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 0.9, -z * 0.6, z * 1.8, z * 0.9);
+      ctx.beginPath();
+      ctx.arc(-z * 0.5, -z * 1.0, z * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'sheep': {
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, z * 1.1, z * 0.75, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#a09080';
+      ctx.beginPath();
+      ctx.arc(-z * 0.8, -z * 0.4, z * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'wolf': {
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 1.0, -z * 0.5, z * 2.0, z * 1.0);
+      ctx.beginPath();
+      ctx.moveTo(-z * 0.9, -z * 0.5);
+      ctx.lineTo(-z * 1.3, -z * 1.3);
+      ctx.lineTo(-z * 0.4, -z * 0.5);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    case 'eagle':
+    case 'crow': {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = z * 0.35;
+      ctx.beginPath();
+      ctx.moveTo(-z * 1.4, 0);
+      ctx.quadraticCurveTo(-z * 0.5, -z * 0.7, 0, 0);
+      ctx.quadraticCurveTo(z * 0.5, -z * 0.7, z * 1.4, 0);
+      ctx.stroke();
+      break;
+    }
+    case 'rabbit': {
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.ellipse(0, z * 0.2, z * 0.55, z * 0.45, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // ears
+      ctx.fillRect(-z * 0.3, -z * 0.7, z * 0.2, z * 0.6);
+      ctx.fillRect(z * 0.1, -z * 0.8, z * 0.2, z * 0.6);
+      break;
+    }
+    case 'fish': {
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, z * 0.9, z * 0.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(z * 0.9, 0);
+      ctx.lineTo(z * 1.5, -z * 0.4);
+      ctx.lineTo(z * 1.5, z * 0.4);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    case 'villager':
+    case 'traveler':
+    case 'fisherman':
+    case 'merchant': {
+      // body
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 0.35, -z * 0.9, z * 0.7, z * 0.9);
+      // head
+      ctx.beginPath();
+      ctx.arc(0, -z * 1.2, z * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      // legs
+      ctx.fillStyle = `rgba(0,0,0,0.35)`;
+      ctx.fillRect(-z * 0.35, 0, z * 0.3, z * 0.55);
+      ctx.fillRect(z * 0.05, 0, z * 0.3, z * 0.55);
+      break;
+    }
+    case 'guard': {
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 0.4, -z * 1.0, z * 0.8, z * 1.0);
+      ctx.beginPath();
+      ctx.arc(0, -z * 1.35, z * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      // spear
+      ctx.strokeStyle = '#8a7050';
+      ctx.lineWidth = z * 0.2;
+      ctx.beginPath();
+      ctx.moveTo(z * 0.55, -z * 1.8);
+      ctx.lineTo(z * 0.55, z * 0.6);
+      ctx.stroke();
+      ctx.fillStyle = '#c0c0b0';
+      ctx.beginPath();
+      ctx.moveTo(z * 0.4, -z * 1.8);
+      ctx.lineTo(z * 0.7, -z * 1.8);
+      ctx.lineTo(z * 0.55, -z * 2.3);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    default: {
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.arc(0, 0, z * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+// ── Human player sprite ────────────────────────────────────────────────────
+type MoveDir = 'up' | 'down' | 'left' | 'right';
+
+function drawHumanPlayer(
+  ctx: CanvasRenderingContext2D,
+  sx: number, sy: number,
+  zoom: number,
+  dir: MoveDir,
+  time: number,
+) {
+  if (zoom < 4) {
+    // Tiny — just a bright dot
+    ctx.fillStyle = '#e8d490';
+    ctx.fillRect(sx - 1, sy - 1, 3, 3);
+    return;
+  }
+
+  const z = zoom;
+  const walkCycle = Math.sin(time * 0.006) * 0.4; // leg swing amplitude
+  const bobY      = Math.abs(Math.sin(time * 0.006)) * z * 0.15; // body bob
+  const facingLeft = dir === 'left';
+
+  ctx.save();
+  ctx.translate(sx, sy);
+  if (facingLeft) ctx.scale(-1, 1);
+
+  // Shadow
+  ctx.beginPath();
+  ctx.ellipse(0, z * 0.3, z * 0.9, z * 0.25, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fill();
+
+  // Cloak / cape (behind body)
+  ctx.beginPath();
+  ctx.moveTo(-z * 0.7, -z * 1.6 + bobY);
+  ctx.lineTo(-z * 0.9, z * 0.4 + bobY);
+  ctx.lineTo(z * 0.9, z * 0.4 + bobY);
+  ctx.lineTo(z * 0.7, -z * 1.6 + bobY);
+  ctx.closePath();
+  ctx.fillStyle = dir === 'up' ? '#6a5a3a' : '#7a6a42';
+  ctx.fill();
+
+  // Back leg
+  const backLegSwing = -walkCycle;
+  ctx.save();
+  ctx.translate(-z * 0.22, z * 0.15 + bobY);
+  ctx.rotate(backLegSwing);
+  ctx.fillStyle = '#4a3a22';
+  ctx.fillRect(-z * 0.18, 0, z * 0.36, z * 0.9);
+  // boot
+  ctx.fillStyle = '#2a1a0a';
+  ctx.fillRect(-z * 0.2, z * 0.75, z * 0.4, z * 0.22);
+  ctx.restore();
+
+  // Front leg
+  ctx.save();
+  ctx.translate(z * 0.22, z * 0.15 + bobY);
+  ctx.rotate(walkCycle);
+  ctx.fillStyle = '#5a4a2a';
+  ctx.fillRect(-z * 0.18, 0, z * 0.36, z * 0.9);
+  // boot
+  ctx.fillStyle = '#2a1a0a';
+  ctx.fillRect(-z * 0.2, z * 0.75, z * 0.4, z * 0.22);
+  ctx.restore();
+
+  // Body / tunic
+  ctx.fillStyle = '#8a7040';
+  ctx.fillRect(-z * 0.45, -z * 1.55 + bobY, z * 0.9, z * 1.7);
+
+  // Belt
+  ctx.fillStyle = '#3a2a10';
+  ctx.fillRect(-z * 0.48, -z * 0.55 + bobY, z * 0.96, z * 0.2);
+  // Belt buckle
+  ctx.fillStyle = '#c0a050';
+  ctx.fillRect(-z * 0.1, -z * 0.58 + bobY, z * 0.2, z * 0.26);
+
+  // Back arm
+  ctx.save();
+  ctx.translate(-z * 0.52, -z * 1.2 + bobY);
+  ctx.rotate(walkCycle * 0.6);
+  ctx.fillStyle = '#7a6038';
+  ctx.fillRect(-z * 0.15, 0, z * 0.3, z * 0.75);
+  ctx.restore();
+
+  // Front arm (sword hand — slightly raised if weapon active)
+  ctx.save();
+  ctx.translate(z * 0.52, -z * 1.2 + bobY);
+  ctx.rotate(-walkCycle * 0.6);
+  ctx.fillStyle = '#8a7040';
+  ctx.fillRect(-z * 0.15, 0, z * 0.3, z * 0.75);
+  ctx.restore();
+
+  // Neck
+  ctx.fillStyle = '#c8a878';
+  ctx.fillRect(-z * 0.18, -z * 1.75 + bobY, z * 0.36, z * 0.22);
+
+  // Head
+  ctx.beginPath();
+  ctx.ellipse(0, -z * 2.1 + bobY, z * 0.42, z * 0.45, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#c8a878';
+  ctx.fill();
+
+  // Hair
+  ctx.beginPath();
+  ctx.ellipse(0, -z * 2.35 + bobY, z * 0.44, z * 0.28, 0, 0, Math.PI);
+  ctx.fillStyle = '#5a3a18';
+  ctx.fill();
+
+  // Face (only when facing camera — down or left/right)
+  if (dir !== 'up') {
+    // Eyes
+    ctx.fillStyle = '#1a0a00';
+    ctx.beginPath();
+    ctx.arc(-z * 0.14, -z * 2.1 + bobY, z * 0.07, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(z * 0.14, -z * 2.1 + bobY, z * 0.07, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Hood / hat for certain directions
+  if (dir === 'up' || dir === 'down') {
+    ctx.beginPath();
+    ctx.ellipse(0, -z * 2.35 + bobY, z * 0.5, z * 0.18, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#4a3820';
+    ctx.fill();
+  }
+
+  ctx.restore();
+
+  // Outer glow ring (player indicator)
+  const pulse = 1 + Math.sin(time * 0.003) * 0.15;
+  ctx.beginPath();
+  ctx.arc(sx, sy - zoom * 1.0, zoom * 1.5 * pulse, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(200,170,80,0.25)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+// ── Main component ─────────────────────────────────────────────────────────
 export default function WorldMap() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef    = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const animRef = useRef<number>(0);
+  const fogCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const playerX = useGameStore(s => s.playerX);
-  const playerY = useGameStore(s => s.playerY);
-  const season = useGameStore(s => s.season);
+  // Smooth visual position (lerps toward game tile position each frame)
+  const visRef = useRef({ x: 0, y: 0, initialised: false });
+  // Last movement direction for player sprite facing
+  const moveDirRef = useRef<MoveDir>('down');
+
+  // Chunk cache: key = chunkY * NUM_CHUNKS_X + chunkX
+  const chunksRef   = useRef<Map<number, HTMLCanvasElement>>(new Map());
+  const seasonRef   = useRef<Season>('thaw');
+
+  // All render state via a single ref — render loop reads from here
+  const stateRef = useRef({
+    playerX: 0, playerY: 0,
+    season: 'thaw' as Season,
+    visitedLocations: [] as string[],
+    nearestLocation: null as string | null,
+    zoom: 7,
+    canvasW: 800, canvasH: 600,
+  });
+
+  // Pull from Zustand
+  const playerX         = useGameStore(s => s.playerX);
+  const playerY         = useGameStore(s => s.playerY);
+  const season          = useGameStore(s => s.season);
   const visitedLocations = useGameStore(s => s.visitedLocations);
-  const nearestLocation = useGameStore(s => s.nearestLocation);
-  const movePlayer = useGameStore(s => s.movePlayer);
+  const nearestLocation  = useGameStore(s => s.nearestLocation);
+  const movePlayer      = useGameStore(s => s.movePlayer);
 
-  const [zoom, setZoom] = useState(6);
-  const [canvasSize, setCanvasSize] = useState({ w: 800, h: 600 });
-  const keysRef = useRef<Set<string>>(new Set());
+  // Keep renderRef in sync (no deps on render loop)
+  useLayoutEffect(() => {
+    const prev = stateRef.current;
+    const seasonChanged = prev.season !== season;
+    stateRef.current = { ...prev, playerX, playerY, season, visitedLocations, nearestLocation };
+    if (seasonChanged) chunksRef.current.clear(); // invalidate chunk cache on season change
+  });
 
-  // Handle resize
+  // Container resize
   useEffect(() => {
     const update = () => {
-      if (containerRef.current) {
-        setCanvasSize({ w: containerRef.current.clientWidth, h: containerRef.current.clientHeight });
-      }
+      if (!containerRef.current) return;
+      const w = containerRef.current.clientWidth;
+      const h = containerRef.current.clientHeight;
+      stateRef.current.canvasW = w;
+      stateRef.current.canvasH = h;
+      const c = canvasRef.current;
+      if (c && (c.width !== w || c.height !== h)) { c.width = w; c.height = h; }
     };
     update();
-    window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
+    const obs = new ResizeObserver(update);
+    if (containerRef.current) obs.observe(containerRef.current);
+    return () => obs.disconnect();
   }, []);
 
   // Keyboard input
   useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (['w', 'a', 's', 'd', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-        e.preventDefault();
-        keysRef.current.add(e.key);
-      }
-    };
-    const up = (e: KeyboardEvent) => keysRef.current.delete(e.key);
-    window.addEventListener('keydown', down);
-    window.addEventListener('keyup', up);
-    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
-  }, []);
-
-  // Movement tick
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const keys = keysRef.current;
+    const keysDown = new Set<string>();
+    const MOVE_KEYS = new Set(['w','a','s','d','ArrowUp','ArrowDown','ArrowLeft','ArrowRight']);
+    const onDown = (e: KeyboardEvent) => { if (MOVE_KEYS.has(e.key)) { e.preventDefault(); keysDown.add(e.key); } };
+    const onUp   = (e: KeyboardEvent) => keysDown.delete(e.key);
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    const iv = setInterval(() => {
       let dx = 0, dy = 0;
-      if (keys.has('w') || keys.has('ArrowUp')) dy = -1;
-      if (keys.has('s') || keys.has('ArrowDown')) dy = 1;
-      if (keys.has('a') || keys.has('ArrowLeft')) dx = -1;
-      if (keys.has('d') || keys.has('ArrowRight')) dx = 1;
-      if (dx !== 0 || dy !== 0) movePlayer(dx, dy);
-    }, 80);
-    return () => clearInterval(interval);
+      if (keysDown.has('w') || keysDown.has('ArrowUp'))    dy = -1;
+      if (keysDown.has('s') || keysDown.has('ArrowDown'))  dy =  1;
+      if (keysDown.has('a') || keysDown.has('ArrowLeft'))  dx = -1;
+      if (keysDown.has('d') || keysDown.has('ArrowRight')) dx =  1;
+      if (dx || dy) {
+        // Track facing direction for sprite
+        if      (dy < 0) moveDirRef.current = 'up';
+        else if (dy > 0) moveDirRef.current = 'down';
+        else if (dx < 0) moveDirRef.current = 'left';
+        else if (dx > 0) moveDirRef.current = 'right';
+        movePlayer(dx, dy);
+      }
+    }, 55); // reduced from 80ms → smoother
+    return () => { clearInterval(iv); window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp); };
   }, [movePlayer]);
 
-  // Render loop
-  const render = useCallback(() => {
+  // Render loop — created once
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const map = getMap();
+    let animId: number;
 
-    const viewW = canvasSize.w;
-    const viewH = canvasSize.h;
-    canvas.width = viewW;
-    canvas.height = viewH;
+    function render(timestamp: number) {
+      const ctx = canvas!.getContext('2d');
+      if (!ctx) { animId = requestAnimationFrame(render); return; }
 
-    const tilePixels = zoom;
-    const tilesX = Math.ceil(viewW / tilePixels) + 2;
-    const tilesY = Math.ceil(viewH / tilePixels) + 2;
-    const camX = playerX - Math.floor(tilesX / 2);
-    const camY = playerY - Math.floor(tilesY / 2);
+      const { playerX, playerY, season, visitedLocations, nearestLocation, zoom, canvasW, canvasH } = stateRef.current;
 
-    ctx.fillStyle = '#0a0a0a';
-    ctx.fillRect(0, 0, viewW, viewH);
-
-    // Draw tiles
-    for (let ty = 0; ty < tilesY; ty++) {
-      for (let tx = 0; tx < tilesX; tx++) {
-        const wx = camX + tx;
-        const wy = camY + ty;
-        if (wx < 0 || wx >= MAP_W || wy < 0 || wy >= MAP_H) continue;
-        const tile = map.tiles[wy][wx];
-        const isRoad = map.roads.has(`${wx},${wy}`);
-        ctx.fillStyle = isRoad ? getRoadColor(season) : getTileColor(tile, season);
-        ctx.fillRect(tx * tilePixels, ty * tilePixels, tilePixels, tilePixels);
+      // Only resize canvas on dimension mismatch (avoid clearing GPU texture every frame)
+      if (canvas!.width !== canvasW || canvas!.height !== canvasH) {
+        canvas!.width  = canvasW;
+        canvas!.height = canvasH;
       }
-    }
 
-    // Fog of war
-    if (zoom < 12) {
-      const fogRadius = 40;
-      for (let ty = 0; ty < tilesY; ty++) {
-        for (let tx = 0; tx < tilesX; tx++) {
-          const wx = camX + tx;
-          const wy = camY + ty;
-          let minDist = Infinity;
-          for (const locId of visitedLocations) {
-            const coord = LOCATION_COORDS[locId];
-            if (!coord) continue;
-            minDist = Math.min(minDist, Math.sqrt((wx - coord.x) ** 2 + (wy - coord.y) ** 2));
+      // ── Smooth camera: lerp visual position toward tile position ──────
+      if (!visRef.current.initialised) {
+        visRef.current.x = playerX;
+        visRef.current.y = playerY;
+        visRef.current.initialised = true;
+      } else {
+        const LERP = 0.18;
+        visRef.current.x += (playerX - visRef.current.x) * LERP;
+        visRef.current.y += (playerY - visRef.current.y) * LERP;
+      }
+      const visX = visRef.current.x;
+      const visY = visRef.current.y;
+
+      const map = getMap();
+      const tilesX = Math.ceil(canvasW / zoom) + 2;
+      const tilesY = Math.ceil(canvasH / zoom) + 2;
+      const camX   = visX - tilesX / 2;
+      const camY   = visY - tilesY / 2;
+
+      // Background
+      ctx.fillStyle = '#080808';
+      ctx.fillRect(0, 0, canvasW, canvasH);
+
+      // ── Draw chunks ────────────────────────────────────────────────────
+      const chunkStartX = Math.max(0, Math.floor(camX / CHUNK_SIZE));
+      const chunkStartY = Math.max(0, Math.floor(camY / CHUNK_SIZE));
+      const chunkEndX   = Math.min(NUM_CHUNKS_X - 1, Math.ceil((camX + tilesX) / CHUNK_SIZE));
+      const chunkEndY   = Math.min(NUM_CHUNKS_Y - 1, Math.ceil((camY + tilesY) / CHUNK_SIZE));
+
+      ctx.imageSmoothingEnabled = false;
+      for (let cy = chunkStartY; cy <= chunkEndY; cy++) {
+        for (let cx = chunkStartX; cx <= chunkEndX; cx++) {
+          const key = cy * NUM_CHUNKS_X + cx;
+          if (!chunksRef.current.has(key)) {
+            chunksRef.current.set(key, bakeChunk(cx, cy, map.tiles, map.roads, season));
           }
-          minDist = Math.min(minDist, Math.sqrt((wx - playerX) ** 2 + (wy - playerY) ** 2));
-          if (minDist > fogRadius * 0.5) {
-            const fogAlpha = Math.min(0.7, (minDist - fogRadius * 0.5) / (fogRadius * 0.5));
-            ctx.fillStyle = `rgba(5, 5, 10, ${fogAlpha})`;
-            ctx.fillRect(tx * tilePixels, ty * tilePixels, tilePixels, tilePixels);
-          }
+          const chunk = chunksRef.current.get(key)!;
+          const sx = (cx * CHUNK_SIZE - camX) * zoom;
+          const sy = (cy * CHUNK_SIZE - camY) * zoom;
+          ctx.drawImage(chunk, sx, sy, CHUNK_SIZE * zoom, CHUNK_SIZE * zoom);
         }
       }
-    }
 
-    // Location markers
-    for (const loc of LOCATIONS) {
-      const coord = LOCATION_COORDS[loc.id];
-      if (!coord) continue;
-      const sx = (coord.x - camX) * tilePixels;
-      const sy = (coord.y - camY) * tilePixels;
-      if (sx < -40 || sx > viewW + 40 || sy < -40 || sy > viewH + 40) continue;
-
-      const isNear = nearestLocation === loc.id;
-      const isVisited = visitedLocations.includes(loc.id);
-      const markerR = isNear ? 12 : 8;
-
-      ctx.beginPath();
-      ctx.arc(sx, sy, markerR, 0, Math.PI * 2);
-      ctx.fillStyle = isNear ? 'rgba(200,170,80,0.9)' : isVisited ? 'rgba(160,140,80,0.6)' : 'rgba(100,100,100,0.4)';
-      ctx.fill();
-      ctx.strokeStyle = isNear ? '#c8aa50' : isVisited ? '#a08c50' : '#666';
-      ctx.lineWidth = isNear ? 2 : 1;
-      ctx.stroke();
-
-      ctx.font = `${isNear ? 16 : 12}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(LOC_ICONS[loc.id] || '📍', sx, sy);
-
-      if (isNear || isVisited || zoom > 4) {
-        ctx.font = `${isNear ? 11 : 9}px "Courier Prime", monospace`;
-        ctx.fillStyle = isNear ? '#c8aa50' : '#888';
-        ctx.textAlign = 'center';
-        ctx.fillText(loc.name, sx, sy + markerR + 12);
+      // ── Water shimmer overlay ──────────────────────────────────────────
+      if (zoom >= 5) {
+        const shimAlpha = 0.04 + Math.sin(timestamp * 0.0008) * 0.02;
+        ctx.fillStyle = `rgba(40,100,160,${shimAlpha})`;
+        // Only paint over water tiles (rough region check is fine)
+        ctx.fillRect(0, 0, canvasW * 0.15, canvasH);
       }
+
+      // ── World objects ──────────────────────────────────────────────────
+      if (zoom >= 4) {
+        for (const obj of map.objects) {
+          const sx = (obj.x - camX) * zoom;
+          const sy = (obj.y - camY) * zoom;
+          if (sx < -zoom * 4 || sx > canvasW + zoom * 4 || sy < -zoom * 4 || sy > canvasH + zoom * 4) continue;
+          drawObject(ctx, obj, sx, sy, zoom, timestamp);
+        }
+      }
+
+      // ── Ambient entities ───────────────────────────────────────────────
+      if (zoom >= 4) {
+        for (const entity of map.entities) {
+          const t = timestamp * 0.001;
+          const animX = entity.x + Math.sin(t * entity.speed + entity.phase) * entity.radius;
+          const animY = entity.y + Math.cos(t * entity.speed * 0.71 + entity.phase + 0.5) * entity.radius * 0.6;
+          const sx = (animX - camX) * zoom;
+          const sy = (animY - camY) * zoom;
+          if (sx < -zoom * 4 || sx > canvasW + zoom * 4 || sy < -zoom * 4 || sy > canvasH + zoom * 4) continue;
+          drawEntity(ctx, entity, sx, sy, zoom);
+        }
+      }
+
+      // ── Fog of war ─────────────────────────────────────────────────────
+      if (!fogCanvasRef.current) {
+        fogCanvasRef.current = document.createElement('canvas');
+      }
+      const fog = fogCanvasRef.current;
+      if (fog.width !== canvasW || fog.height !== canvasH) { fog.width = canvasW; fog.height = canvasH; }
+      const fogCtx = fog.getContext('2d')!;
+      fogCtx.clearRect(0, 0, canvasW, canvasH);
+      fogCtx.fillStyle = 'rgba(4,4,8,0.82)';
+      fogCtx.fillRect(0, 0, canvasW, canvasH);
+      fogCtx.globalCompositeOperation = 'destination-out';
+
+      const playerSX = (playerX - camX) * zoom;
+      const playerSY = (playerY - camY) * zoom;
+      const addReveal = (lx: number, ly: number, inner: number, outer: number) => {
+        const g = fogCtx.createRadialGradient(lx, ly, 0, lx, ly, outer * zoom);
+        g.addColorStop(0,             'rgba(0,0,0,1.0)');
+        g.addColorStop(inner / outer, 'rgba(0,0,0,0.85)');
+        g.addColorStop(1,             'rgba(0,0,0,0)');
+        fogCtx.fillStyle = g;
+        fogCtx.beginPath();
+        fogCtx.arc(lx, ly, outer * zoom, 0, Math.PI * 2);
+        fogCtx.fill();
+      };
+
+      addReveal(playerSX, playerSY, 60, 110);
+      for (const locId of visitedLocations) {
+        const coord = LOCATION_COORDS[locId];
+        if (!coord) continue;
+        const lsx = (coord.x - camX) * zoom;
+        const lsy = (coord.y - camY) * zoom;
+        addReveal(lsx, lsy, 80, 160);
+      }
+
+      fogCtx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(fog, 0, 0);
+
+      // ── Location markers ───────────────────────────────────────────────
+      for (const loc of LOCATIONS) {
+        const coord = LOCATION_COORDS[loc.id];
+        if (!coord) continue;
+        const lsx = (coord.x - camX) * zoom;
+        const lsy = (coord.y - camY) * zoom;
+        if (lsx < -50 || lsx > canvasW + 50 || lsy < -50 || lsy > canvasH + 50) continue;
+
+        const isNear    = nearestLocation === loc.id;
+        const isVisited = visitedLocations.includes(loc.id);
+        const markerR   = isNear ? 14 : 9;
+
+        // Pulse ring for nearest location
+        if (isNear) {
+          const pulse = 1 + Math.sin(timestamp * 0.004) * 0.25;
+          ctx.beginPath();
+          ctx.arc(lsx, lsy, markerR * pulse * 1.6, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(200,170,80,0.12)';
+          ctx.fill();
+        }
+
+        ctx.beginPath();
+        ctx.arc(lsx, lsy, markerR, 0, Math.PI * 2);
+        ctx.fillStyle = isNear ? 'rgba(200,170,80,0.95)' : isVisited ? 'rgba(160,140,80,0.65)' : 'rgba(80,80,80,0.4)';
+        ctx.fill();
+        ctx.strokeStyle = isNear ? '#c8aa50' : isVisited ? '#a08c50' : '#555';
+        ctx.lineWidth = isNear ? 2 : 1;
+        ctx.stroke();
+
+        ctx.font = `${isNear ? 17 : 13}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(LOC_ICONS[loc.id] ?? '📍', lsx, lsy);
+
+        if (isNear || isVisited || zoom > 5) {
+          ctx.font = `${isNear ? 11 : 9}px "Courier Prime", monospace`;
+          ctx.fillStyle = isNear ? '#c8aa50' : '#777';
+          ctx.textBaseline = 'top';
+          ctx.fillText(loc.name, lsx, lsy + markerR + 4);
+        }
+      }
+
+      // ── Player (human sprite) ──────────────────────────────────────────
+      // Visual pos is already the camera centre; sprite drawn there
+      const psx = (visX - camX) * zoom;
+      const psy = (visY - camY) * zoom;
+      drawHumanPlayer(ctx, psx, psy, zoom, moveDirRef.current, timestamp);
+
+      // ── Off-screen compass indicators ──────────────────────────────────
+      for (const loc of LOCATIONS) {
+        const coord = LOCATION_COORDS[loc.id];
+        if (!coord) continue;
+        const lsx = (coord.x - camX) * zoom;
+        const lsy = (coord.y - camY) * zoom;
+        const dist = Math.sqrt((coord.x - playerX) ** 2 + (coord.y - playerY) ** 2);
+        if (dist > 300 || dist < 25) continue;
+        if (lsx > 30 && lsx < canvasW - 30 && lsy > 30 && lsy < canvasH - 30) continue;
+
+        const angle = Math.atan2(coord.y - visY, coord.x - visX);
+        const edgeX = Math.max(24, Math.min(canvasW - 24, psx + Math.cos(angle) * (canvasW / 2 - 35)));
+        const edgeY = Math.max(24, Math.min(canvasH - 24, psy + Math.sin(angle) * (canvasH / 2 - 35)));
+
+        ctx.save();
+        ctx.translate(edgeX, edgeY);
+        ctx.rotate(angle);
+        ctx.beginPath();
+        ctx.moveTo(9, 0); ctx.lineTo(-5, -5); ctx.lineTo(-5, 5);
+        ctx.closePath();
+        ctx.fillStyle = visitedLocations.includes(loc.id) ? 'rgba(200,170,80,0.7)' : 'rgba(140,140,140,0.4)';
+        ctx.fill();
+        ctx.restore();
+
+        ctx.font = '8px "Courier Prime", monospace';
+        ctx.fillStyle = 'rgba(200,170,80,0.55)';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(`${loc.name} (${Math.round(dist)})`, edgeX, edgeY + 13);
+      }
+
+      // ── Vignette ───────────────────────────────────────────────────────
+      const vig = ctx.createRadialGradient(canvasW / 2, canvasH / 2, canvasH * 0.3, canvasW / 2, canvasH / 2, canvasH * 0.85);
+      vig.addColorStop(0, 'rgba(0,0,0,0)');
+      vig.addColorStop(1, 'rgba(0,0,0,0.55)');
+      ctx.fillStyle = vig;
+      ctx.fillRect(0, 0, canvasW, canvasH);
+
+      // ── HUD zoom indicator ─────────────────────────────────────────────
+      ctx.font = '10px "Courier Prime", monospace';
+      ctx.fillStyle = 'rgba(200,185,140,0.4)';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'top';
+      ctx.fillText(`${zoom.toFixed(1)}×`, canvasW - 10, 10);
+
+      animId = requestAnimationFrame(render);
     }
 
-    // Player token
-    const psx = (playerX - camX) * tilePixels;
-    const psy = (playerY - camY) * tilePixels;
-    const pulse = Math.sin(Date.now() / 300) * 2 + 6;
-
-    ctx.beginPath();
-    ctx.arc(psx, psy, pulse + 4, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(200,170,80,0.15)';
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(psx, psy, 4, 0, Math.PI * 2);
-    ctx.fillStyle = '#c8aa50';
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // Off-screen landmark indicators
-    for (const loc of LOCATIONS) {
-      const coord = LOCATION_COORDS[loc.id];
-      if (!coord) continue;
-      const lsx = (coord.x - camX) * tilePixels;
-      const lsy = (coord.y - camY) * tilePixels;
-      const dist = Math.sqrt((coord.x - playerX) ** 2 + (coord.y - playerY) ** 2);
-      if (dist > 200 || dist < 20) continue;
-      if (lsx > 30 && lsx < viewW - 30 && lsy > 30 && lsy < viewH - 30) continue;
-
-      const angle = Math.atan2(coord.y - playerY, coord.x - playerX);
-      const edgeX = Math.max(20, Math.min(viewW - 20, psx + Math.cos(angle) * (viewW / 2 - 30)));
-      const edgeY = Math.max(20, Math.min(viewH - 20, psy + Math.sin(angle) * (viewH / 2 - 30)));
-
-      ctx.save();
-      ctx.translate(edgeX, edgeY);
-      ctx.rotate(angle);
-      ctx.beginPath();
-      ctx.moveTo(8, 0);
-      ctx.lineTo(-4, -4);
-      ctx.lineTo(-4, 4);
-      ctx.closePath();
-      ctx.fillStyle = visitedLocations.includes(loc.id) ? 'rgba(200,170,80,0.6)' : 'rgba(150,150,150,0.4)';
-      ctx.fill();
-      ctx.restore();
-
-      ctx.font = '8px "Courier Prime", monospace';
-      ctx.fillStyle = 'rgba(200,170,80,0.5)';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${loc.name} (${Math.round(dist)})`, edgeX, edgeY + 14);
-    }
-
-    animRef.current = requestAnimationFrame(render);
-  }, [canvasSize, playerX, playerY, season, visitedLocations, nearestLocation, zoom]);
-
-  useEffect(() => {
-    animRef.current = requestAnimationFrame(render);
-    return () => cancelAnimationFrame(animRef.current);
-  }, [render]);
+    animId = requestAnimationFrame(render);
+    return () => cancelAnimationFrame(animId);
+  }, []); // empty — render loop lives forever, reads from stateRef
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
-    setZoom(z => Math.max(3, Math.min(15, z + (e.deltaY > 0 ? -0.5 : 0.5))));
+    stateRef.current.zoom = Math.max(3, Math.min(18, stateRef.current.zoom + (e.deltaY > 0 ? -0.6 : 0.6)));
   }, []);
 
   return (
@@ -227,12 +901,6 @@ export default function WorldMap() {
         className="w-full h-full cursor-crosshair"
         style={{ imageRendering: 'pixelated' }}
       />
-      <div className="absolute inset-0 pointer-events-none" style={{
-        background: 'radial-gradient(ellipse at center, transparent 50%, rgba(5,5,10,0.6) 100%)',
-      }} />
-      <div className="absolute top-3 right-3 font-mono-game text-[10px] text-mist opacity-50">
-        {zoom.toFixed(1)}x
-      </div>
     </div>
   );
 }

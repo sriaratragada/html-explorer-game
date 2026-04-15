@@ -93,9 +93,22 @@ export interface EnvironmentAction {
 
 export type OverlayType = 'none' | 'player' | 'chronicle' | 'map';
 
+export type ItemType = 'tool' | 'weapon' | 'resource' | 'food' | 'armor' | 'misc';
+
+export interface HotbarItem {
+  id: string;
+  name: string;
+  icon: string;
+  quantity: number;
+  type: ItemType;
+  description: string;
+}
+
 export type TutorialStep = 'cinematic' | 'movement' | 'hotkeys' | 'landmark' | 'done';
 
 export interface GameState {
+  hotbar: HotbarItem[];
+  activeSlot: number;
   phase: 'title' | 'playing' | 'chronicle';
   isMoving: boolean;
   tick: number;
