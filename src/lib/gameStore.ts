@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { GameState, Season, ChronicleEntry, Reputation, FactionStanding, OverlayType, TutorialStep, EnvironmentAction, HotbarItem } from './gameTypes';
-import { INITIAL_NPCS, generateEvents, getWorldEvent, getPlayerTitle, ENVIRONMENT_ACTIONS, FOOD_VALUES } from './gameData';
+import { INITIAL_NPCS, generateEvents, getWorldEvent, getPlayerTitle, ENVIRONMENT_ACTIONS, FOOD_VALUES, LORE_ENTRIES } from './gameData';
 import { LOCATION_COORDS, isWalkableCode, generateWorldMap, WorldMap as WorldMapData, MAP_W, MAP_H } from './mapGenerator';
 
 const SEASON_ORDER: Season[] = ['thaw', 'summer', 'harvest', 'dark'];
@@ -82,6 +82,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   playerY: LOCATION_COORDS.ashenford.y,
   npcs: [],
   chronicle: [],
+  loreEntries: LORE_ENTRIES.map(entry => ({ ...entry, unlocked: false })),
+  unlockedLore: [],
   currentEvent: null,
   lastResult: null,
   visitedLocations: [],
@@ -116,6 +118,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       playerY: LOCATION_COORDS.ashenford.y,
       npcs,
       chronicle: [initialChronicle],
+      loreEntries: LORE_ENTRIES.map(entry => ({ ...entry, unlocked: false })),
+      unlockedLore: [],
       currentEvent: null,
       lastResult: null,
       visitedLocations: ['ashenford'],
@@ -265,6 +269,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
       newChronicle.push({ tick: newTick, season: newSeason, text: `Arrived in ${locationId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} for the first time.`, type: 'discovery' });
     }
 
+    const newlyUnlocked = state.loreEntries
+      .filter(e => !e.unlocked && e.triggerLocationId === locationId)
+      .map(e => e.id);
+    const updatedEntries = state.loreEntries.map(e =>
+      newlyUnlocked.includes(e.id) ? { ...e, unlocked: true } : e
+    );
+    const loreChronicleEntries: ChronicleEntry[] = newlyUnlocked.map(id => {
+      const entry = state.loreEntries.find(e => e.id === id);
+      if (!entry) return null;
+      return {
+        tick: newTick,
+        season: newSeason,
+        text: `[Lore Unlocked] ${entry.title}: ${entry.body}`,
+        type: 'lore' as const,
+      };
+    }).filter((entry): entry is ChronicleEntry => entry !== null);
+
     // Hunger & health decay on fast-travel
     const travelDecay = newSeason === 'dark' ? 0.75 : 0.5;
     const travelHunger = Math.max(0, state.hunger - travelDecay);
@@ -285,7 +306,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentEvent: events.length > 0 ? events[0] : null,
       lastResult: null,
       visitedLocations: visited ? state.visitedLocations : [...state.visitedLocations, locationId],
-      chronicle: [...state.chronicle, ...newChronicle],
+      chronicle: [...state.chronicle, ...newChronicle, ...loreChronicleEntries],
+      loreEntries: updatedEntries,
+      unlockedLore: newlyUnlocked.length > 0 ? [...state.unlockedLore, ...newlyUnlocked] : state.unlockedLore,
       hunger: travelHunger,
       health: travelHealth,
       phase: travelPhase,

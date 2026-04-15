@@ -49,8 +49,8 @@ export const TILE_NAMES: TileType[] = [
   'ruins', 'road', 'river', 'clearing', 'farm_field',
 ];
 
-export const MAP_W = 2000;
-export const MAP_H = 2000;
+export const MAP_W = 6000;
+export const MAP_H = 3000;
 export const TILE_SIZE = 5; // kept for legacy references
 export const CHUNK_SIZE = 64;
 export const NUM_CHUNKS_X = Math.ceil(MAP_W / CHUNK_SIZE); // 32
@@ -69,7 +69,45 @@ export const LOCATION_COORDS: Record<string, { x: number; y: number }> = {
   badlands:        { x: 1520, y: 680  },
   coldpeak:        { x: 480,  y: 180  },
   ruins_of_aether: { x: 1780, y: 940  },
+  dawnhaven:       { x: 450,  y: 780  },
+  vaultkeep:       { x: 760,  y: 300  },
+  greenhollow:     { x: 1180, y: 900  },
+  tidewatch:       { x: 130,  y: 430  },
+  sundrift_port:   { x: 2250, y: 1500 },
+  salt_throne:     { x: 2700, y: 800  },
+  ember_crossing:  { x: 3100, y: 1200 },
+  canyon_veil:     { x: 3500, y: 1800 },
+  dust_oracle:     { x: 2900, y: 2300 },
+  tidegate_haven:  { x: 4300, y: 1400 },
+  ironvine_citadel:{ x: 4800, y: 600  },
+  mossdeep:        { x: 5300, y: 1900 },
+  ashflow_rim:     { x: 5700, y: 900  },
+  rootspire:       { x: 5100, y: 2600 },
 };
+
+export const CONTINENTS = [
+  {
+    id: 'aethermoor',
+    name: 'Aethermoor',
+    xMin: 0, xMax: 1999, yMin: 0, yMax: 2999,
+    dominantBiome: 'Temperate mixed (plains, forest, mountain)',
+    loreBlurb: 'The oldest inhabited continent. Seat of the collapsed Aetherik Empire. Six factions struggle over its bones.',
+  },
+  {
+    id: 'sundrift',
+    name: 'The Sundrift Expanse',
+    xMin: 2200, xMax: 3999, yMin: 0, yMax: 2999,
+    dominantBiome: 'Arid savanna, salt flats, desert canyons',
+    loreBlurb: 'A vast sun-scorched continent rich in rare minerals and buried Aetherik ruins. The Amber Compact finances most of the expeditions into its interior.',
+  },
+  {
+    id: 'verdant_reach',
+    name: 'The Verdant Reach',
+    xMin: 4200, xMax: 5999, yMin: 0, yMax: 2999,
+    dominantBiome: 'Dense rainforest, river networks, volcanic highlands',
+    loreBlurb: 'Largely uncharted. The Greenwarden Covenant claims spiritual authority over it but controls none of it. Indigenous city-states trade only by sea.',
+  },
+] as const;
 
 // ── Colour palettes ────────────────────────────────────────────────────────
 // Index matches T.* codes  (0-14)
@@ -159,8 +197,9 @@ function setTile(tiles: Uint8Array, x: number, y: number, code: number) {
 
 function bresenhamLine(x0: number, y0: number, x1: number, y1: number): [number, number][] {
   const pts: [number, number][] = [];
-  let dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
-  let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx - dy;
+  const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+  let err = dx - dy;
   for (;;) {
     pts.push([x0, y0]);
     if (x0 === x1 && y0 === y1) break;
@@ -183,6 +222,20 @@ const BIOME_INFLUENCE: Record<string, { code: number; radius: number }> = {
   badlands:        { code: T.HILL,         radius: 65 },
   coldpeak:        { code: T.SNOW,         radius: 55 },
   ruins_of_aether: { code: T.RUINS,        radius: 45 },
+  dawnhaven:       { code: T.FARM_FIELD,   radius: 40 },
+  vaultkeep:       { code: T.MOUNTAIN,     radius: 40 },
+  greenhollow:     { code: T.FOREST,       radius: 50 },
+  tidewatch:       { code: T.SAND,         radius: 35 },
+  sundrift_port:   { code: T.SAND,         radius: 50 },
+  salt_throne:     { code: T.SAND,         radius: 60 },
+  ember_crossing:  { code: T.HILL,         radius: 45 },
+  canyon_veil:     { code: T.HILL,         radius: 55 },
+  dust_oracle:     { code: T.RUINS,        radius: 40 },
+  tidegate_haven:  { code: T.FOREST,       radius: 55 },
+  ironvine_citadel:{ code: T.DENSE_FOREST, radius: 65 },
+  mossdeep:        { code: T.SWAMP,        radius: 55 },
+  ashflow_rim:     { code: T.MOUNTAIN,     radius: 50 },
+  rootspire:       { code: T.DENSE_FOREST, radius: 60 },
 };
 
 export const CONNECTIONS: [string, string][] = [
@@ -193,6 +246,16 @@ export const CONNECTIONS: [string, string][] = [
   ['thornwick', 'ruins_of_aether'], ['graygate', 'dustfall'],
   ['graygate', 'crossroads'],  ['dustfall', 'badlands'],
   ['marshend', 'badlands'],
+  ['dawnhaven', 'ashenford'], ['dawnhaven', 'saltmoor'],
+  ['vaultkeep', 'ironhold'], ['vaultkeep', 'crossroads'],
+  ['greenhollow', 'thornwick'], ['greenhollow', 'ashenford'],
+  ['tidewatch', 'saltmoor'],
+  ['saltmoor', 'sundrift_port'], ['tidewatch', 'sundrift_port'],
+  ['sundrift_port', 'salt_throne'], ['salt_throne', 'ember_crossing'],
+  ['ember_crossing', 'canyon_veil'], ['canyon_veil', 'dust_oracle'],
+  ['sundrift_port', 'tidegate_haven'], ['tidegate_haven', 'ironvine_citadel'],
+  ['ironvine_citadel', 'ashflow_rim'], ['ironvine_citadel', 'mossdeep'],
+  ['mossdeep', 'rootspire'],
 ];
 
 // ── Main generation ────────────────────────────────────────────────────────
@@ -271,6 +334,13 @@ export function generateWorldMap(): WorldMap {
         tiles[y * MAP_W + x] = x < 25 ? T.DEEP_WATER : T.WATER;
       }
     }
+  }
+
+  // ── 4. Biome influence zones
+  // Force ocean straits between continents
+  for (let y = 0; y < MAP_H; y++) {
+    for (let x = 2000; x < 2200; x++) tiles[y * MAP_W + x] = T.DEEP_WATER;
+    for (let x = 4000; x < 4200; x++) tiles[y * MAP_W + x] = T.DEEP_WATER;
   }
 
   // ── 4. Biome influence zones
@@ -368,9 +438,17 @@ export function generateWorldMap(): WorldMap {
     if (!ca || !cb) continue;
     for (const [px, py] of bresenhamLine(ca.x, ca.y, cb.x, cb.y)) {
       if (px < 0 || px >= MAP_W || py < 0 || py >= MAP_H) continue;
+      const tile = tiles[py * MAP_W + px];
+      if (tile === T.DEEP_WATER || tile === T.WATER) continue;
       roads[py * MAP_W + px] = 1;
-      if (hash(px, py) > 0.3 && py + 1 < MAP_H)   roads[(py + 1) * MAP_W + px] = 1;
-      if (hash(px + 1, py) > 0.5 && px + 1 < MAP_W) roads[py * MAP_W + (px + 1)] = 1;
+      if (hash(px, py) > 0.3 && py + 1 < MAP_H) {
+        const southTile = tiles[(py + 1) * MAP_W + px];
+        if (southTile !== T.DEEP_WATER && southTile !== T.WATER) roads[(py + 1) * MAP_W + px] = 1;
+      }
+      if (hash(px + 1, py) > 0.5 && px + 1 < MAP_W) {
+        const eastTile = tiles[py * MAP_W + (px + 1)];
+        if (eastTile !== T.DEEP_WATER && eastTile !== T.WATER) roads[py * MAP_W + (px + 1)] = 1;
+      }
     }
   }
 
