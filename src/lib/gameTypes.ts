@@ -89,6 +89,7 @@ export interface EnvironmentAction {
   resultText: string;
   chronicleText: string;
   cooldownTicks: number;
+  itemReward?: { id: string; name: string; icon: string; quantity: number; type: ItemType; description: string };
 }
 
 export type OverlayType = 'none' | 'player' | 'chronicle' | 'map';
@@ -109,7 +110,10 @@ export type TutorialStep = 'cinematic' | 'movement' | 'hotkeys' | 'landmark' | '
 export interface GameState {
   hotbar: HotbarItem[];
   activeSlot: number;
-  phase: 'title' | 'playing' | 'chronicle';
+  phase: 'title' | 'playing' | 'chronicle' | 'dead';
+  health: number;
+  maxHealth: number;
+  hunger: number;
   isMoving: boolean;
   tick: number;
   season: Season;

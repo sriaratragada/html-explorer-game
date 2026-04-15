@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { GameState, Season, ChronicleEntry, Reputation, FactionStanding, OverlayType, TutorialStep, EnvironmentAction, HotbarItem } from './gameTypes';
-import { INITIAL_NPCS, generateEvents, getWorldEvent, getPlayerTitle, ENVIRONMENT_ACTIONS } from './gameData';
+import { INITIAL_NPCS, generateEvents, getWorldEvent, getPlayerTitle, ENVIRONMENT_ACTIONS, FOOD_VALUES } from './gameData';
 import { LOCATION_COORDS, isWalkableCode, generateWorldMap, WorldMap as WorldMapData, MAP_W, MAP_H } from './mapGenerator';
 
 const SEASON_ORDER: Season[] = ['thaw', 'summer', 'harvest', 'dark'];
@@ -35,9 +35,22 @@ const STARTER_HOTBAR: HotbarItem[] = [
   { id: 'empty',        name: '',              icon: '',   quantity: 0, type: 'misc',    description: '' },
 ];
 
+function addItemToHotbar(hotbar: HotbarItem[], item: HotbarItem): HotbarItem[] {
+  const next = [...hotbar];
+  const existingIdx = next.findIndex(s => s.id === item.id && s.id !== 'empty');
+  if (existingIdx !== -1) {
+    next[existingIdx] = { ...next[existingIdx], quantity: next[existingIdx].quantity + item.quantity };
+    return next;
+  }
+  const emptyIdx = next.findIndex(s => !s.id || s.id === 'empty');
+  if (emptyIdx !== -1) { next[emptyIdx] = { ...item }; return next; }
+  return next; // hotbar full — silently drop
+}
+
 interface GameStore extends GameState {
   startGame: () => void;
   setActiveSlot: (slot: number) => void;
+  useItem: () => void;
   travel: (locationId: string) => void;
   movePlayer: (dx: number, dy: number) => void;
   makeChoice: (choiceId: string) => void;
@@ -55,6 +68,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isMoving: false,
   hotbar: STARTER_HOTBAR,
   activeSlot: 0,
+  health: 100,
+  maxHealth: 100,
+  hunger: 100,
   tick: 0,
   season: 'thaw',
   seasonTick: 0,
@@ -88,6 +104,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({
       phase: 'playing',
       isMoving: false,
+      health: 100,
+      maxHealth: 100,
+      hunger: 100,
       tick: 0, season: 'thaw', seasonTick: 0,
       reputation: { conquest: 0, trade: 0, craft: 0, diplomacy: 0, exploration: 0, arcane: 0 },
       factions: { amber: 0, iron: 0, green: 0, scholar: 0, ashen: 0, tide: 0 },
@@ -112,9 +131,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   setActiveSlot: (slot: number) => set({ activeSlot: slot }),
 
+  useItem: () => {
+    const state = get();
+    if (state.phase !== 'playing') return;
+    const item = state.hotbar[state.activeSlot];
+    if (!item || item.id === 'empty' || item.type !== 'food') return;
+
+    const restore = FOOD_VALUES[item.id] ?? 5;
+    const newHunger = Math.min(100, state.hunger + restore);
+    const newHotbar = [...state.hotbar];
+    if (item.quantity <= 1) {
+      newHotbar[state.activeSlot] = { id: 'empty', name: '', icon: '', quantity: 0, type: 'misc', description: '' };
+    } else {
+      newHotbar[state.activeSlot] = { ...item, quantity: item.quantity - 1 };
+    }
+    const entry: ChronicleEntry = {
+      tick: state.tick, season: state.season,
+      text: `The traveler ate ${item.name}. Hunger abates somewhat.`,
+      type: 'action',
+    };
+    set({ hunger: newHunger, hotbar: newHotbar, chronicle: [...state.chronicle, entry] });
+  },
+
   movePlayer: (dx: number, dy: number) => {
     const state = get();
-    if (state.currentEvent || state.lastResult) return;
+    if (state.currentEvent || state.lastResult || state.phase === 'dead') return;
     
     const map = getMap();
     const nx = state.playerX + dx;
@@ -169,6 +210,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // Hunger & health decay — only when a tick advances (new location proximity entered)
+    let newHunger = state.hunger;
+    let newHealth = state.health;
+    let newPhase: GameState['phase'] = state.phase;
+    if (newTick > state.tick) {
+      const decay = newSeason === 'dark' ? 0.75 : 0.5;
+      newHunger = Math.max(0, newHunger - decay);
+      if (newHunger === 0)       newHealth = Math.max(0, newHealth - 2);
+      else if (newHunger < 20)   newHealth = Math.max(0, newHealth - 0.5);
+      if (newHealth <= 0)        newPhase = 'dead';
+    }
+
     set({
       playerX: nx, playerY: ny,
       nearestLocation: nearest,
@@ -179,6 +232,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       visitedLocations: newVisited,
       chronicle: [...state.chronicle, ...newChronicle],
       currentEvent: newEvent,
+      hunger: newHunger,
+      health: newHealth,
+      phase: newPhase,
       playerTitle: getPlayerTitle(state.reputation as unknown as Record<string, number>),
     });
   },
@@ -209,6 +265,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       newChronicle.push({ tick: newTick, season: newSeason, text: `Arrived in ${locationId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} for the first time.`, type: 'discovery' });
     }
 
+    // Hunger & health decay on fast-travel
+    const travelDecay = newSeason === 'dark' ? 0.75 : 0.5;
+    const travelHunger = Math.max(0, state.hunger - travelDecay);
+    let travelHealth = state.health;
+    let travelPhase: GameState['phase'] = state.phase;
+    if (travelHunger === 0)      travelHealth = Math.max(0, travelHealth - 2);
+    else if (travelHunger < 20)  travelHealth = Math.max(0, travelHealth - 0.5);
+    if (travelHealth <= 0)       travelPhase = 'dead';
+
     set({
       currentLocation: locationId,
       nearestLocation: locationId,
@@ -221,6 +286,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastResult: null,
       visitedLocations: visited ? state.visitedLocations : [...state.visitedLocations, locationId],
       chronicle: [...state.chronicle, ...newChronicle],
+      hunger: travelHunger,
+      health: travelHealth,
+      phase: travelPhase,
       playerTitle: getPlayerTitle(state.reputation as unknown as Record<string, number>),
     });
   },
@@ -310,9 +378,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       newRep[key as keyof Reputation] = Math.min(100, Math.max(0, newRep[key as keyof Reputation] + (val || 0)));
     });
 
+    const newHotbar = action.itemReward
+      ? addItemToHotbar(state.hotbar, action.itemReward)
+      : state.hotbar;
+
     const entry: ChronicleEntry = { tick: state.tick, season: state.season, text: action.chronicleText, type: 'environment' };
     set({
       reputation: newRep,
+      hotbar: newHotbar,
       lastResult: action.resultText,
       chronicle: [...state.chronicle, entry],
       environmentCooldowns: { ...state.environmentCooldowns, [actionId]: state.tick + action.cooldownTicks },

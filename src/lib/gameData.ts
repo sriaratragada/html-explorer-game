@@ -1,5 +1,14 @@
 import { Location, Npc, GameEvent, Season, EnvironmentAction } from './gameTypes';
 
+export const FOOD_VALUES: Record<string, number> = {
+  trail_ration: 25,
+  berries:      10,
+  raw_meat:      8,
+  cooked_meat:  20,
+  fish:         15,
+  bread:        20,
+};
+
 export const SEASON_NAMES: Record<Season, string> = {
   thaw: 'The Thaw', summer: 'High Summer', harvest: 'The Harvest', dark: 'The Long Dark',
 };
@@ -27,12 +36,12 @@ export const FACTION_INFO: Record<string, { name: string; motto: string; icon: s
 };
 
 export const ENVIRONMENT_ACTIONS: EnvironmentAction[] = [
-  { id: 'forage', label: 'Forage for herbs', icon: '🌿', terrain: 'forest', repEffects: { craft: 3 }, resultText: 'You find useful herbs among the undergrowth. Your knowledge of plants grows.', chronicleText: 'The traveler foraged for herbs in the forest.', cooldownTicks: 3 },
+  { id: 'forage', label: 'Forage for herbs', icon: '🌿', terrain: 'forest', repEffects: { craft: 3 }, resultText: 'You find useful herbs among the undergrowth. Your knowledge of plants grows.', chronicleText: 'The traveler foraged for herbs in the forest.', cooldownTicks: 3, itemReward: { id: 'berries', name: 'Wild Berries', icon: '🫐', quantity: 2, type: 'food', description: 'Fresh-picked. Sweet and tart.' } },
   { id: 'forage_dense', label: 'Forage rare plants', icon: '🍄', terrain: 'dense_forest', repEffects: { craft: 5, arcane: 2 }, resultText: 'Deep in the old growth, you find mushrooms that glow faintly. Alchemists would pay well.', chronicleText: 'The traveler found rare fungi in the deep forest.', cooldownTicks: 5 },
-  { id: 'hunt', label: 'Hunt game', icon: '🏹', terrain: 'forest', repEffects: { conquest: 3, exploration: 2 }, resultText: 'A clean kill. The forest provides for those who know how to take.', chronicleText: 'The traveler hunted in the forest.', cooldownTicks: 3 },
+  { id: 'hunt', label: 'Hunt game', icon: '🏹', terrain: 'forest', repEffects: { conquest: 3, exploration: 2 }, resultText: 'A clean kill. The forest provides for those who know how to take.', chronicleText: 'The traveler hunted in the forest.', cooldownTicks: 3, itemReward: { id: 'raw_meat', name: 'Raw Meat', icon: '🥩', quantity: 1, type: 'food', description: 'Needs cooking, but edible raw in a pinch.' } },
   { id: 'search_ruins', label: 'Search for artifacts', icon: '🔮', terrain: 'ruins', repEffects: { arcane: 5, exploration: 3 }, resultText: 'Among the rubble, a fragment of old text. The symbols seem to shift when you look away.', chronicleText: 'The traveler searched the ruins and found remnants of the old world.', cooldownTicks: 4 },
   { id: 'map_ruins', label: 'Map the area', icon: '🗺️', terrain: 'ruins', repEffects: { exploration: 5 }, resultText: 'You carefully sketch the layout. Every ruin tells a story of what stood before.', chronicleText: 'The traveler mapped a ruin site.', cooldownTicks: 4 },
-  { id: 'fish', label: 'Fish', icon: '🎣', terrain: 'river', repEffects: { trade: 3, craft: 1 }, resultText: 'The river yields its bounty. Fresh fish can be traded or eaten.', chronicleText: 'The traveler fished by the river.', cooldownTicks: 3 },
+  { id: 'fish', label: 'Fish', icon: '🎣', terrain: 'river', repEffects: { trade: 3, craft: 1 }, resultText: 'The river yields its bounty. Fresh fish can be traded or eaten.', chronicleText: 'The traveler fished by the river.', cooldownTicks: 3, itemReward: { id: 'fish', name: 'Fresh Fish', icon: '🐟', quantity: 2, type: 'food', description: 'River catch. Best eaten soon.' } },
   { id: 'study_water', label: 'Study the currents', icon: '🌊', terrain: 'river', repEffects: { exploration: 4 }, resultText: 'The water flows in patterns that reveal the shape of the land upstream.', chronicleText: 'The traveler studied river currents.', cooldownTicks: 4 },
   { id: 'camp_road', label: 'Set up camp', icon: '🏕️', terrain: 'road', repEffects: { diplomacy: 3 }, resultText: 'A traveler passes and shares news over your fire. Connections form on the road.', chronicleText: 'The traveler camped by the road and met fellow wanderers.', cooldownTicks: 3 },
   { id: 'climb_hill', label: 'Climb for a vantage point', icon: '⛰️', terrain: 'hill', repEffects: { exploration: 4, conquest: 1 }, resultText: 'From the hilltop, you can see for miles. Landmarks revealed.', chronicleText: 'The traveler climbed a hill to survey the land.', cooldownTicks: 4 },

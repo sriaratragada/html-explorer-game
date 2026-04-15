@@ -105,6 +105,14 @@ export default {
           "0%, 100%": { opacity: "0.3" },
           "50%": { opacity: "1" },
         },
+        "pulse-blood": {
+          "0%, 100%": { opacity: "0.6" },
+          "50%": { opacity: "1", filter: "brightness(1.3)" },
+        },
+        "pulse-amber": {
+          "0%, 100%": { opacity: "0.5" },
+          "50%": { opacity: "1", filter: "brightness(1.2)" },
+        },
         "typewriter": {
           from: { width: "0" },
           to: { width: "100%" },
@@ -115,6 +123,8 @@ export default {
         "accordion-up": "accordion-up 0.2s ease-out",
         "fade-up": "fade-up 0.6s ease-out both",
         "pulse-gold": "pulse-gold 2s ease infinite",
+        "pulse-blood": "pulse-blood 1s ease-in-out infinite",
+        "pulse-amber": "pulse-amber 1.2s ease-in-out infinite",
       },
     },
   },

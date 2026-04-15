@@ -607,6 +607,7 @@ export default function WorldMap() {
   const visitedLocations = useGameStore(s => s.visitedLocations);
   const nearestLocation  = useGameStore(s => s.nearestLocation);
   const movePlayer      = useGameStore(s => s.movePlayer);
+  const useItem         = useGameStore(s => s.useItem);
 
   // Keep renderRef in sync (no deps on render loop)
   useLayoutEffect(() => {
@@ -658,6 +659,17 @@ export default function WorldMap() {
     }, 55); // reduced from 80ms → smoother
     return () => { clearInterval(iv); window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp); };
   }, [movePlayer]);
+
+  // E key — use active hotbar item (food)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'e' && e.key !== 'E') return;
+      if (['INPUT', 'TEXTAREA'].includes((document.activeElement as HTMLElement)?.tagName ?? '')) return;
+      useItem();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [useItem]);
 
   // Render loop — created once
   useEffect(() => {

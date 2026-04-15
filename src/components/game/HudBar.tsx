@@ -14,6 +14,9 @@ export default function HudBar() {
   const environmentCooldowns = useGameStore(s => s.environmentCooldowns);
   const setOverlay = useGameStore(s => s.setOverlay);
   const performEnvironmentAction = useGameStore(s => s.performEnvironmentAction);
+  const health    = useGameStore(s => s.health);
+  const maxHealth = useGameStore(s => s.maxHealth);
+  const hunger    = useGameStore(s => s.hunger);
 
   const locData = nearestLocation ? LOCATIONS.find(l => l.id === nearestLocation) : null;
 
@@ -55,8 +58,33 @@ export default function HudBar() {
       {/* Main HUD bar */}
       <div className="bg-ink/95 border-t border-gold/15 backdrop-blur-md px-4 py-2">
         <div className="flex items-center justify-between max-w-screen-xl mx-auto">
-          {/* Left — season & location */}
-          <div className="flex items-center gap-4">
+          {/* Left — vital bars + season & location */}
+          <div className="flex flex-col gap-1">
+            {/* Vital bars */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1">
+                <span className="text-[11px]">❤️</span>
+                <div className="w-20 h-1.5 bg-ash overflow-hidden border border-gold/10">
+                  <div
+                    className={`h-full transition-all duration-300 ${health < 25 ? 'animate-pulse-blood bg-blood' : 'bg-blood/70'}`}
+                    style={{ width: `${(health / maxHealth) * 100}%` }}
+                  />
+                </div>
+                <span className="font-mono text-[8px] text-mist/50">{Math.ceil(health)}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-[11px]">🍖</span>
+                <div className="w-20 h-1.5 bg-ash overflow-hidden border border-gold/10">
+                  <div
+                    className={`h-full transition-all duration-300 ${hunger < 20 ? 'animate-pulse-amber bg-rust' : 'bg-rust/70'}`}
+                    style={{ width: `${hunger}%` }}
+                  />
+                </div>
+                <span className="font-mono text-[8px] text-mist/50">{Math.ceil(hunger)}</span>
+              </div>
+            </div>
+            {/* Season & location row */}
+            <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5">
               <span className="text-sm">{SEASON_ICONS[season]}</span>
               <span className="font-mono-game text-[10px] text-mist uppercase tracking-wider">
@@ -70,7 +98,8 @@ export default function HudBar() {
                 <span className="font-display text-xs text-parchment">{locData.name}</span>
               </div>
             )}
-          </div>
+            </div>{/* end season row */}
+          </div>{/* end left col */}
 
           {/* Center — title */}
           <div className="font-display text-xs text-gold gold-glow hidden sm:block">
