@@ -46,6 +46,8 @@ export interface Location {
   npcs: string[];
   connections: string[];
   icon: string;
+  mapX?: number;
+  mapY?: number;
 }
 
 export interface ChronicleEntry {
