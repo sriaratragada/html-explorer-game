@@ -40,7 +40,7 @@ export interface Npc {
 export interface Location {
   id: string;
   name: string;
-  type: 'village' | 'city' | 'fortress' | 'ruins' | 'wilderness' | 'port';
+  type: 'village' | 'town' | 'city' | 'castle' | 'fortress' | 'ruins' | 'wilderness' | 'port';
   description: string;
   biome: string;
   npcs: string[];
@@ -50,11 +50,29 @@ export interface Location {
   mapY?: number;
 }
 
+export interface SettlementProfile {
+  tier: 'village' | 'town' | 'city' | 'castle';
+  footprintRadius: number;
+  wallThickness: number;
+  guardCount: number;
+  marketSlots: number;
+  npcCapacity: number;
+}
+
 export interface ChronicleEntry {
   tick: number;
   season: Season;
   text: string;
-  type: 'action' | 'world' | 'npc' | 'faction' | 'discovery' | 'environment';
+  type: 'action' | 'world' | 'npc' | 'faction' | 'discovery' | 'environment' | 'lore';
+}
+
+export interface LoreEntry {
+  id: string;
+  title: string;
+  body: string;
+  continent: string;
+  triggerLocationId: string;
+  unlocked: boolean;
 }
 
 export interface GameChoice {
@@ -126,6 +144,8 @@ export interface GameState {
   playerY: number;
   npcs: Npc[];
   chronicle: ChronicleEntry[];
+  loreEntries: LoreEntry[];
+  unlockedLore: string[];
   currentEvent: GameEvent | null;
   lastResult: string | null;
   visitedLocations: string[];

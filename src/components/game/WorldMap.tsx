@@ -6,7 +6,7 @@ import {
   WorldObject, AmbientEntity,
   WorldObjectType, AmbientEntityType,
 } from '@/lib/mapGenerator';
-import { LOCATIONS } from '@/lib/gameData';
+import { LOCATIONS, SETTLEMENT_PROFILES } from '@/lib/gameData';
 import { Season } from '@/lib/gameTypes';
 
 // ── Location icons ─────────────────────────────────────────────────────────
@@ -14,6 +14,25 @@ const LOC_ICONS: Record<string, string> = {
   ashenford: '🏘️', saltmoor: '🏙️', ironhold: '🏰', thornwick: '🌲',
   graygate: '🏛️', dustfall: '🗿', crossroads: '🍺', marshend: '🌿',
   badlands: '💀', coldpeak: '⛰️', ruins_of_aether: '✨',
+  dawnhaven: '🏪', vaultkeep: '🏯', greenhollow: '🌳', tidewatch: '🗼',
+  sundrift_port: '⚓', salt_throne: '🏜️', ember_crossing: '🔥',
+  canyon_veil: '🏔️', dust_oracle: '🌪️',
+  tidegate_haven: '🌴', ironvine_citadel: '🌋', mossdeep: '🍃',
+  ashflow_rim: '⚗️', rootspire: '🌿',
+};
+
+const FOOTPRINT_COLORS: Record<string, string> = {
+  village: 'rgba(180,160,100,0.18)',
+  town: 'rgba(160,140,80,0.25)',
+  city: 'rgba(200,170,90,0.35)',
+  castle: 'rgba(100,90,80,0.40)',
+};
+
+const WALL_COLORS: Record<string, string> = {
+  village: 'transparent',
+  town: 'rgba(140,120,70,0.50)',
+  city: 'rgba(180,150,60,0.70)',
+  castle: 'rgba(80,72,60,0.85)',
 };
 
 // ── Object colours (r,g,b) for fast lookup ─────────────────────────────────
@@ -833,6 +852,19 @@ export default function WorldMap() {
           ctx.arc(lsx, lsy, markerR * pulse * 1.6, 0, Math.PI * 2);
           ctx.fillStyle = 'rgba(200,170,80,0.12)';
           ctx.fill();
+        }
+
+        const profile = SETTLEMENT_PROFILES[loc.type as keyof typeof SETTLEMENT_PROFILES] ?? null;
+        if (profile) {
+          ctx.beginPath();
+          ctx.arc(lsx, lsy, profile.footprintRadius * zoom, 0, Math.PI * 2);
+          ctx.fillStyle = FOOTPRINT_COLORS[profile.tier];
+          ctx.fill();
+          if (profile.wallThickness > 0) {
+            ctx.strokeStyle = WALL_COLORS[profile.tier];
+            ctx.lineWidth = profile.wallThickness * zoom;
+            ctx.stroke();
+          }
         }
 
         ctx.beginPath();
