@@ -3,6 +3,19 @@ import { GameState, Season, ChronicleEntry, Reputation, FactionStanding, Overlay
 import { INITIAL_NPCS, generateEvents, getWorldEvent, getPlayerTitle, ENVIRONMENT_ACTIONS, FOOD_VALUES, LORE_ENTRIES } from './gameData';
 import { LOCATION_COORDS, isWalkableCode, generateWorldMap, WorldMap as WorldMapData, MAP_W, MAP_H } from './mapGenerator';
 
+const INITIAL_FACTIONS: FactionStanding = {
+  amber: 0,
+  iron: 0,
+  green: 0,
+  scholar: 0,
+  ashen: 0,
+  tide: 0,
+  auredia: 0,
+  korrath: 0,
+  vell: 0,
+  sarnak: 0,
+};
+
 const SEASON_ORDER: Season[] = ['thaw', 'summer', 'harvest', 'dark'];
 const TICKS_PER_SEASON = 12;
 const PROXIMITY_RADIUS = 30;
@@ -34,6 +47,53 @@ const STARTER_HOTBAR: HotbarItem[] = [
   { id: 'trail_ration', name: 'Trail Rations', icon: '🍖', quantity: 3, type: 'food',    description: 'Dried meat. Enough for a few days.' },
   { id: 'empty',        name: '',              icon: '',   quantity: 0, type: 'misc',    description: '' },
 ];
+
+function makeStarterInventory() {
+  const slots = Array.from({ length: 30 }, () => null as HotbarItem | null);
+  for (let i = 0; i < 6; i++) slots[i] = { ...STARTER_HOTBAR[i] };
+  return {
+    slots,
+    equipment: {
+      mainhand: null,
+      offhand: null,
+      helm: null,
+      chest: null,
+      legs: null,
+      boots: null,
+      amulet: null,
+    },
+    gold: 0,
+  };
+}
+
+function makeStarterSkills() {
+  return {
+    combat: { xp: 0, level: 1, perks: [] },
+    stealth: { xp: 0, level: 1, perks: [] },
+    diplomacy: { xp: 0, level: 1, perks: [] },
+    crafting: { xp: 0, level: 1, perks: [] },
+  };
+}
+
+function makeStarterWeather() {
+  return {
+    auredia: { kind: 'clear' as const, ticksLeft: 10 },
+    trivalen: { kind: 'clear' as const, ticksLeft: 10 },
+    uloren: { kind: 'fog' as const, ticksLeft: 12 },
+  };
+}
+
+function makeStarterFactionState() {
+  return {
+    kingdoms: {
+      auredia: { treasury: 1000, armySize: 600, territory: [], atWarWith: [] },
+      korrath: { treasury: 800, armySize: 500, territory: [], atWarWith: [] },
+      vell: { treasury: 800, armySize: 500, territory: [], atWarWith: [] },
+      sarnak: { treasury: 800, armySize: 500, territory: [], atWarWith: [] },
+    },
+    wars: [],
+  };
+}
 
 function addItemToHotbar(hotbar: HotbarItem[], item: HotbarItem): HotbarItem[] {
   const next = [...hotbar];
@@ -71,16 +131,33 @@ export const useGameStore = create<GameStore>((set, get) => ({
   health: 100,
   maxHealth: 100,
   hunger: 100,
+  stamina: 100,
   tick: 0,
   season: 'thaw',
   seasonTick: 0,
+  worldTime: 0,
+  dayPhase: 'day',
+  weather: makeStarterWeather(),
   reputation: { conquest: 0, trade: 0, craft: 0, diplomacy: 0, exploration: 0, arcane: 0 },
-  factions: { amber: 0, iron: 0, green: 0, scholar: 0, ashen: 0, tide: 0 },
+  factions: INITIAL_FACTIONS,
   currentLocation: 'ashenford',
   nearestLocation: 'ashenford',
   playerX: LOCATION_COORDS.ashenford.x,
   playerY: LOCATION_COORDS.ashenford.y,
+  playerDir: 'down',
   npcs: [],
+  entities: [],
+  markets: {},
+  quests: [],
+  bounties: [],
+  activeBountyId: null,
+  factionState: makeStarterFactionState(),
+  fog: {},
+  housing: {},
+  dungeon: null,
+  mountedBoatId: null,
+  inventory: makeStarterInventory(),
+  skills: makeStarterSkills(),
   chronicle: [],
   loreEntries: LORE_ENTRIES.map(entry => ({ ...entry, unlocked: false })),
   unlockedLore: [],
@@ -92,6 +169,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
   overlay: 'none',
   tutorialStep: 'cinematic',
   environmentCooldowns: {},
+  dialogueNpcId: null,
+  dialogueNodeId: null,
+  shopLocationId: null,
+  seed: 1337,
+  tickRunning: true,
 
   startGame: () => {
     // Pre-generate map
@@ -109,14 +191,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
       health: 100,
       maxHealth: 100,
       hunger: 100,
+  stamina: 100,
       tick: 0, season: 'thaw', seasonTick: 0,
+  worldTime: 0,
+  dayPhase: 'day',
+  weather: makeStarterWeather(),
       reputation: { conquest: 0, trade: 0, craft: 0, diplomacy: 0, exploration: 0, arcane: 0 },
-      factions: { amber: 0, iron: 0, green: 0, scholar: 0, ashen: 0, tide: 0 },
+  factions: INITIAL_FACTIONS,
       currentLocation: 'ashenford',
       nearestLocation: 'ashenford',
       playerX: LOCATION_COORDS.ashenford.x,
       playerY: LOCATION_COORDS.ashenford.y,
+  playerDir: 'down',
       npcs,
+  entities: [],
+  markets: {},
+  quests: [],
+  bounties: [],
+  activeBountyId: null,
+  factionState: makeStarterFactionState(),
+  fog: {},
+  housing: {},
+  dungeon: null,
+  mountedBoatId: null,
+  inventory: makeStarterInventory(),
+  skills: makeStarterSkills(),
       chronicle: [initialChronicle],
       loreEntries: LORE_ENTRIES.map(entry => ({ ...entry, unlocked: false })),
       unlockedLore: [],
@@ -128,6 +227,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       overlay: 'none',
       tutorialStep: 'movement',
       environmentCooldowns: {},
+      dialogueNpcId: null,
+      dialogueNodeId: null,
+      shopLocationId: null,
+      seed: 1337,
+      tickRunning: true,
       hotbar: STARTER_HOTBAR,
       activeSlot: 0,
     });
@@ -166,7 +270,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const ny = state.playerY + dy;
     
     if (nx < 0 || nx >= MAP_W || ny < 0 || ny >= MAP_H) return;
-    if (!isWalkableCode(map.tiles[ny * MAP_W + nx])) return;
+  if (!isWalkableCode(map.getTile(nx, ny))) return;
 
     const nearest = findNearestLocation(nx, ny);
     const newChronicle: ChronicleEntry[] = [];
@@ -275,7 +379,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const updatedEntries = state.loreEntries.map(e =>
       newlyUnlocked.includes(e.id) ? { ...e, unlocked: true } : e
     );
-    const loreChronicleEntries: ChronicleEntry[] = newlyUnlocked.map(id => {
+    const loreChronicleEntries = newlyUnlocked.map(id => {
       const entry = state.loreEntries.find(e => e.id === id);
       if (!entry) return null;
       return {
@@ -284,7 +388,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         text: `[Lore Unlocked] ${entry.title}: ${entry.body}`,
         type: 'lore' as const,
       };
-    }).filter((entry): entry is ChronicleEntry => entry !== null);
+    }).filter((entry): entry is Exclude<typeof entry, null> => entry !== null);
 
     // Hunger & health decay on fast-travel
     const travelDecay = newSeason === 'dark' ? 0.75 : 0.5;

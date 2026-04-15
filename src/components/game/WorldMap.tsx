@@ -3,11 +3,34 @@ import { useGameStore, getMap } from '@/lib/gameStore';
 import {
   MAP_W, MAP_H, CHUNK_SIZE, NUM_CHUNKS_X, NUM_CHUNKS_Y,
   LOCATION_COORDS, PARSED_PALETTES,
-  WorldObject, AmbientEntity,
-  WorldObjectType, AmbientEntityType,
 } from '@/lib/mapGenerator';
 import { LOCATIONS, SETTLEMENT_PROFILES } from '@/lib/gameData';
 import { Season } from '@/lib/gameTypes';
+
+type WorldObjectType =
+  | 'farm' | 'barn' | 'windmill' | 'watchtower' | 'dock' | 'bridge'
+  | 'campfire' | 'market_stall' | 'ruins_pillar' | 'stone_wall' | 'stone_circle'
+  | 'hut' | 'well' | 'shrine' | 'gate' | 'fence';
+
+interface WorldObject {
+  type: WorldObjectType;
+  x: number;
+  y: number;
+  variant: number;
+}
+
+type AmbientEntityType =
+  | 'deer' | 'sheep' | 'wolf' | 'eagle' | 'rabbit' | 'fish'
+  | 'crow' | 'villager' | 'fisherman' | 'guard' | 'merchant' | 'traveler';
+
+interface AmbientEntity {
+  type: AmbientEntityType;
+  x: number;
+  y: number;
+  speed: number;
+  phase: number;
+  radius: number;
+}
 
 // ── Location icons ─────────────────────────────────────────────────────────
 const LOC_ICONS: Record<string, string> = {
@@ -74,7 +97,7 @@ const ENTITY_COLORS: Record<AmbientEntityType, string> = {
 // ── Chunk baking ───────────────────────────────────────────────────────────
 function bakeChunk(
   chunkX: number, chunkY: number,
-  tiles: Uint8Array, roads: Uint8Array,
+  chunk: Uint8Array,
   season: Season,
 ): HTMLCanvasElement {
   const c = document.createElement('canvas');
@@ -89,9 +112,7 @@ function bakeChunk(
       const wx = chunkX * CHUNK_SIZE + tx;
       const wy = chunkY * CHUNK_SIZE + ty;
       if (wx >= MAP_W || wy >= MAP_H) continue;
-      const mapIdx = wy * MAP_W + wx;
-      const isRoad = roads[mapIdx] === 1;
-      const code = isRoad ? 11 : tiles[mapIdx]; // 11 = ROAD
+  const code = chunk[ty * CHUNK_SIZE + tx];
       const [r, g, b] = pal[code] ?? [50, 50, 50];
 
       // Subtle variation per tile for texture
@@ -626,7 +647,7 @@ export default function WorldMap() {
   const visitedLocations = useGameStore(s => s.visitedLocations);
   const nearestLocation  = useGameStore(s => s.nearestLocation);
   const movePlayer      = useGameStore(s => s.movePlayer);
-  const useItem         = useGameStore(s => s.useItem);
+  const consumeItem     = useGameStore(s => s.useItem);
   const setOverlay      = useGameStore(s => s.setOverlay);
   const overlay         = useGameStore(s => s.overlay);
 
@@ -686,17 +707,16 @@ export default function WorldMap() {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== 'e' && e.key !== 'E') return;
       if (['INPUT', 'TEXTAREA'].includes((document.activeElement as HTMLElement)?.tagName ?? '')) return;
-      useItem();
+      consumeItem();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [useItem]);
+  }, [consumeItem]);
 
   // ? key — toggle help overlay
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== '?' && e.key !== 'h' && e.key !== 'H') return;
-      if (e.key === '?') e.shiftKey = true; // ? is Shift+/
       if (['INPUT', 'TEXTAREA'].includes((document.activeElement as HTMLElement)?.tagName ?? '')) return;
       setOverlay(overlay === 'help' ? 'none' : 'help');
     };
@@ -756,7 +776,7 @@ export default function WorldMap() {
         for (let cx = chunkStartX; cx <= chunkEndX; cx++) {
           const key = cy * NUM_CHUNKS_X + cx;
           if (!chunksRef.current.has(key)) {
-            chunksRef.current.set(key, bakeChunk(cx, cy, map.tiles, map.roads, season));
+            chunksRef.current.set(key, bakeChunk(cx, cy, map.getChunk(cx, cy), season));
           }
           const chunk = chunksRef.current.get(key)!;
           const sx = (cx * CHUNK_SIZE - camX) * zoom;
@@ -774,8 +794,10 @@ export default function WorldMap() {
       }
 
       // ── World objects ──────────────────────────────────────────────────
+      // TODO(worldEntities): wire these to world entity/object registries.
+      const worldObjects: WorldObject[] = [];
       if (zoom >= 4) {
-        for (const obj of map.objects) {
+        for (const obj of worldObjects) {
           const sx = (obj.x - camX) * zoom;
           const sy = (obj.y - camY) * zoom;
           if (sx < -zoom * 4 || sx > canvasW + zoom * 4 || sy < -zoom * 4 || sy > canvasH + zoom * 4) continue;
@@ -784,8 +806,9 @@ export default function WorldMap() {
       }
 
       // ── Ambient entities ───────────────────────────────────────────────
+      const ambientEntities: AmbientEntity[] = [];
       if (zoom >= 4) {
-        for (const entity of map.entities) {
+        for (const entity of ambientEntities) {
           const t = timestamp * 0.001;
           const animX = entity.x + Math.sin(t * entity.speed + entity.phase) * entity.radius;
           const animY = entity.y + Math.cos(t * entity.speed * 0.71 + entity.phase + 0.5) * entity.radius * 0.6;
