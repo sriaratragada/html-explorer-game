@@ -47,6 +47,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       phase: 'playing',
       isMoving: false,
       tick: 0,
+      season: 'thaw',
       seasonTick: 0,
       reputation: { conquest: 0, trade: 0, craft: 0, diplomacy: 0, exploration: 0, arcane: 0 },
       factions: { amber: 0, iron: 0, green: 0, scholar: 0, ashen: 0, tide: 0 },
