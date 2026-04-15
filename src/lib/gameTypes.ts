@@ -34,7 +34,7 @@ export interface Npc {
   faction: keyof FactionStanding | 'none';
   personality: string;
   memories: NpcMemory[];
-  disposition: number; // -100 to 100
+  disposition: number;
 }
 
 export interface Location {
@@ -54,7 +54,7 @@ export interface ChronicleEntry {
   tick: number;
   season: Season;
   text: string;
-  type: 'action' | 'world' | 'npc' | 'faction' | 'discovery';
+  type: 'action' | 'world' | 'npc' | 'faction' | 'discovery' | 'environment';
 }
 
 export interface GameChoice {
@@ -80,6 +80,21 @@ export interface GameEvent {
   triggered?: boolean;
 }
 
+export interface EnvironmentAction {
+  id: string;
+  label: string;
+  icon: string;
+  terrain: string;
+  repEffects: Partial<Reputation>;
+  resultText: string;
+  chronicleText: string;
+  cooldownTicks: number;
+}
+
+export type OverlayType = 'none' | 'player' | 'chronicle' | 'map';
+
+export type TutorialStep = 'cinematic' | 'movement' | 'hotkeys' | 'landmark' | 'done';
+
 export interface GameState {
   phase: 'title' | 'playing' | 'chronicle';
   isMoving: boolean;
@@ -89,6 +104,9 @@ export interface GameState {
   reputation: Reputation;
   factions: FactionStanding;
   currentLocation: string;
+  nearestLocation: string | null;
+  playerX: number;
+  playerY: number;
   npcs: Npc[];
   chronicle: ChronicleEntry[];
   currentEvent: GameEvent | null;
@@ -96,4 +114,7 @@ export interface GameState {
   visitedLocations: string[];
   completedEvents: string[];
   playerTitle: string;
+  overlay: OverlayType;
+  tutorialStep: TutorialStep;
+  environmentCooldowns: Record<string, number>;
 }
