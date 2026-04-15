@@ -107,6 +107,40 @@ function bakeChunk(
   return c;
 }
 
+function bakeMiniMap(
+  tiles: Uint8Array,
+  roads: Uint8Array,
+  season: Season,
+  width = 360,
+  height = 180,
+): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = width;
+  c.height = height;
+  const ctx = c.getContext('2d')!;
+  const img = ctx.createImageData(width, height);
+  const d = img.data;
+  const pal = PARSED_PALETTES[season];
+
+  for (let py = 0; py < height; py++) {
+    const wy = Math.floor((py / height) * MAP_H);
+    for (let px = 0; px < width; px++) {
+      const wx = Math.floor((px / width) * MAP_W);
+      const idx = wy * MAP_W + wx;
+      const code = roads[idx] === 1 ? 11 : tiles[idx];
+      const [r, g, b] = pal[code] ?? [40, 40, 40];
+      const p = (py * width + px) * 4;
+      d[p] = r;
+      d[p + 1] = g;
+      d[p + 2] = b;
+      d[p + 3] = 255;
+    }
+  }
+
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
 // ── Object rendering ───────────────────────────────────────────────────────
 function drawObject(
   ctx: CanvasRenderingContext2D,
@@ -599,6 +633,7 @@ export default function WorldMap() {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const fogCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const miniMapCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Smooth visual position (lerps toward game tile position each frame)
   const visRef = useRef({ x: 0, y: 0, initialised: false });
@@ -608,6 +643,7 @@ export default function WorldMap() {
   // Chunk cache: key = chunkY * NUM_CHUNKS_X + chunkX
   const chunksRef   = useRef<Map<number, HTMLCanvasElement>>(new Map());
   const seasonRef   = useRef<Season>('thaw');
+  const miniMapSeasonRef = useRef<Season>('thaw');
 
   // All render state via a single ref — render loop reads from here
   const stateRef = useRef({
@@ -626,7 +662,7 @@ export default function WorldMap() {
   const visitedLocations = useGameStore(s => s.visitedLocations);
   const nearestLocation  = useGameStore(s => s.nearestLocation);
   const movePlayer      = useGameStore(s => s.movePlayer);
-  const useItem         = useGameStore(s => s.useItem);
+  const consumeItem     = useGameStore(s => s.useItem);
   const setOverlay      = useGameStore(s => s.setOverlay);
   const overlay         = useGameStore(s => s.overlay);
 
@@ -686,11 +722,11 @@ export default function WorldMap() {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== 'e' && e.key !== 'E') return;
       if (['INPUT', 'TEXTAREA'].includes((document.activeElement as HTMLElement)?.tagName ?? '')) return;
-      useItem();
+      consumeItem();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [useItem]);
+  }, [consumeItem]);
 
   // ? key — toggle help overlay
   useEffect(() => {
@@ -736,6 +772,10 @@ export default function WorldMap() {
       const visY = visRef.current.y;
 
       const map = getMap();
+      if (!miniMapCanvasRef.current || miniMapSeasonRef.current !== season) {
+        miniMapCanvasRef.current = bakeMiniMap(map.tiles, map.roads, season);
+        miniMapSeasonRef.current = season;
+      }
       const tilesX = Math.ceil(canvasW / zoom) + 2;
       const tilesY = Math.ceil(canvasH / zoom) + 2;
       const camX   = visX - tilesX / 2;
@@ -931,6 +971,40 @@ export default function WorldMap() {
       vig.addColorStop(1, 'rgba(0,0,0,0.55)');
       ctx.fillStyle = vig;
       ctx.fillRect(0, 0, canvasW, canvasH);
+
+      // ── Minimap ─────────────────────────────────────────────────────────
+      const miniW = 230;
+      const miniH = 115;
+      const miniX = canvasW - miniW - 14;
+      const miniY = canvasH - miniH - 14;
+      const mini = miniMapCanvasRef.current;
+      if (mini) {
+        ctx.fillStyle = 'rgba(8,8,12,0.82)';
+        ctx.fillRect(miniX - 8, miniY - 8, miniW + 16, miniH + 16);
+        ctx.strokeStyle = 'rgba(200,170,80,0.6)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(miniX - 8, miniY - 8, miniW + 16, miniH + 16);
+        ctx.drawImage(mini, miniX, miniY, miniW, miniH);
+
+        const viewportWorldW = canvasW / zoom;
+        const viewportWorldH = canvasH / zoom;
+        const viewW = Math.max(2, (viewportWorldW / MAP_W) * miniW);
+        const viewH = Math.max(2, (viewportWorldH / MAP_H) * miniH);
+        const viewX = miniX + (visX / MAP_W) * miniW - viewW / 2;
+        const viewY = miniY + (visY / MAP_H) * miniH - viewH / 2;
+        ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(viewX, viewY, viewW, viewH);
+
+        const miniPlayerX = miniX + (visX / MAP_W) * miniW;
+        const miniPlayerY = miniY + (visY / MAP_H) * miniH;
+        ctx.beginPath();
+        ctx.arc(miniPlayerX, miniPlayerY, 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(230,205,120,1)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(40,30,10,0.9)';
+        ctx.stroke();
+      }
 
       // ── HUD zoom indicator ─────────────────────────────────────────────
       ctx.font = '10px "Courier Prime", monospace';

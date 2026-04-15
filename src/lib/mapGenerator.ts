@@ -1,4 +1,5 @@
 import { Season } from './gameTypes';
+import { LOCATIONS, SETTLEMENT_PROFILES } from './gameData';
 
 // ── Value noise ────────────────────────────────────────────────────────────
 const SEED = 42;
@@ -464,6 +465,70 @@ function generateObjects(tiles: Uint8Array, roads: Uint8Array, out: WorldObject[
   const push = (x: number, y: number, type: WorldObjectType, variant = 0) => {
     if (x >= 0 && x < MAP_W && y >= 0 && y < MAP_H) out.push({ x, y, type, variant });
   };
+
+  const settlementLocations = LOCATIONS.filter(l => l.type in SETTLEMENT_PROFILES);
+
+  // Settlement districts by tier so the world reads as a medieval kingdom
+  for (const loc of settlementLocations) {
+    const c = LOCATION_COORDS[loc.id];
+    if (!c) continue;
+    const profile = SETTLEMENT_PROFILES[loc.type as keyof typeof SETTLEMENT_PROFILES];
+    if (!profile) continue;
+
+    const districtCount = Math.max(6, profile.npcCapacity * 2);
+    for (let i = 0; i < districtCount; i++) {
+      const ang = hash(i * 13, loc.id.charCodeAt(0) + 17) * Math.PI * 2;
+      const d = 4 + hash(i * 7, loc.id.charCodeAt(1) + 31) * profile.footprintRadius * 0.95;
+      const x = Math.round(c.x + Math.cos(ang) * d);
+      const y = Math.round(c.y + Math.sin(ang) * d);
+      if (x < 0 || x >= MAP_W || y < 0 || y >= MAP_H) continue;
+      const tile = tiles[y * MAP_W + x] ?? T.GRASS;
+      if (tile === T.DEEP_WATER || tile === T.WATER) continue;
+
+      if (loc.type === 'village') {
+        const pick = hash(i * 5, loc.id.charCodeAt(2));
+        push(x, y, pick > 0.75 ? 'farm' : 'hut', i % 4);
+      } else if (loc.type === 'town') {
+        const pick = hash(i * 11, loc.id.charCodeAt(2));
+        if (pick > 0.75) push(x, y, 'market_stall', i % 4);
+        else if (pick > 0.45) push(x, y, 'barn', i % 3);
+        else push(x, y, 'hut', i % 4);
+      } else if (loc.type === 'city') {
+        const pick = hash(i * 17, loc.id.charCodeAt(2));
+        if (pick > 0.8) push(x, y, 'watchtower', i % 2);
+        else if (pick > 0.4) push(x, y, 'market_stall', i % 4);
+        else push(x, y, 'barn', i % 3);
+      } else if (loc.type === 'castle') {
+        const pick = hash(i * 19, loc.id.charCodeAt(2));
+        if (pick > 0.7) push(x, y, 'watchtower', i % 2);
+        else push(x, y, 'stone_wall', i % 4);
+      }
+    }
+
+    if (profile.wallThickness > 0) {
+      const wallPieces = 16 + profile.wallThickness * 8;
+      for (let i = 0; i < wallPieces; i++) {
+        const ang = (i / wallPieces) * Math.PI * 2;
+        push(
+          Math.round(c.x + Math.cos(ang) * (profile.footprintRadius + 2)),
+          Math.round(c.y + Math.sin(ang) * (profile.footprintRadius + 2)),
+          'stone_wall',
+          i % 4,
+        );
+      }
+      push(c.x, c.y + profile.footprintRadius + 3, 'gate', profile.wallThickness % 2);
+    } else {
+      for (let i = 0; i < 14; i++) {
+        const ang = (i / 14) * Math.PI * 2;
+        push(
+          Math.round(c.x + Math.cos(ang) * (profile.footprintRadius + 6)),
+          Math.round(c.y + Math.sin(ang) * (profile.footprintRadius + 6)),
+          'fence',
+          i % 2,
+        );
+      }
+    }
+  }
 
   // Farms & barns around agricultural villages
   for (const v of ['ashenford', 'graygate', 'crossroads'] as const) {

@@ -1,10 +1,13 @@
 import { motion } from 'framer-motion';
-import { useGameStore } from '@/lib/gameStore';
+import { getMap, useGameStore } from '@/lib/gameStore';
 import { useEffect, useRef } from 'react';
+import { LOCATIONS } from '@/lib/gameData';
+import { LOCATION_COORDS, MAP_H, MAP_W, PARSED_PALETTES } from '@/lib/mapGenerator';
 
 export default function TitleScreen() {
   const startGame = useGameStore(s => s.startGame);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const worldMapRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const c = canvasRef.current;
@@ -64,6 +67,61 @@ export default function TitleScreen() {
     return () => { cancelAnimationFrame(animId); window.removeEventListener('resize', resize); };
   }, []);
 
+  useEffect(() => {
+    const mapCanvas = worldMapRef.current;
+    if (!mapCanvas) return;
+    const ctx = mapCanvas.getContext('2d');
+    if (!ctx) return;
+
+    const world = getMap();
+    const width = 900;
+    const height = 450;
+    mapCanvas.width = width;
+    mapCanvas.height = height;
+
+    const img = ctx.createImageData(width, height);
+    const d = img.data;
+    const pal = PARSED_PALETTES.thaw;
+    for (let py = 0; py < height; py++) {
+      const wy = Math.floor((py / height) * MAP_H);
+      for (let px = 0; px < width; px++) {
+        const wx = Math.floor((px / width) * MAP_W);
+        const idx = wy * MAP_W + wx;
+        const code = world.roads[idx] === 1 ? 11 : world.tiles[idx];
+        const [r, g, b] = pal[code] ?? [30, 30, 30];
+        const i = (py * width + px) * 4;
+        d[i] = r;
+        d[i + 1] = g;
+        d[i + 2] = b;
+        d[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+
+    const typeColor: Record<string, string> = {
+      village: '#c6ad68',
+      town: '#d3b878',
+      city: '#e4c987',
+      castle: '#f0d89a',
+    };
+
+    for (const loc of LOCATIONS) {
+      const c = LOCATION_COORDS[loc.id];
+      if (!c) continue;
+      const x = (c.x / MAP_W) * width;
+      const y = (c.y / MAP_H) * height;
+      const r = loc.type === 'city' ? 4 : loc.type === 'town' ? 3.2 : loc.type === 'castle' ? 3.6 : 2.8;
+
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = typeColor[loc.type] ?? '#8c8c8c';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(20, 12, 8, 0.8)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }, []);
+
   return (
     <div className="relative min-h-screen flex flex-col items-center justify-center text-center overflow-hidden bg-ink">
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full opacity-30" />
@@ -100,6 +158,22 @@ export default function TitleScreen() {
         >
           An open-world RPG where the world doesn't care about you. Not yet.
         </motion.p>
+
+        <motion.div
+          className="w-[min(92vw,960px)] mt-2 rounded-sm border border-gold/30 bg-ink/65 p-3 shadow-[0_0_50px_rgba(0,0,0,0.55)]"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.0 }}
+        >
+          <p className="mb-2 font-mono text-[10px] tracking-[0.3em] text-gold/80 uppercase">
+            Realm Atlas
+          </p>
+          <canvas
+            ref={worldMapRef}
+            className="w-full h-[clamp(210px,34vh,390px)] border border-gold/20 bg-[#0f0f0f]"
+            style={{ imageRendering: 'pixelated' }}
+          />
+        </motion.div>
 
         <motion.div
           className="w-[120px] h-px bg-gradient-to-r from-transparent via-gold to-transparent my-4"
