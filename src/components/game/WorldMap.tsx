@@ -608,6 +608,8 @@ export default function WorldMap() {
   const nearestLocation  = useGameStore(s => s.nearestLocation);
   const movePlayer      = useGameStore(s => s.movePlayer);
   const useItem         = useGameStore(s => s.useItem);
+  const setOverlay      = useGameStore(s => s.setOverlay);
+  const overlay         = useGameStore(s => s.overlay);
 
   // Keep renderRef in sync (no deps on render loop)
   useLayoutEffect(() => {
@@ -670,6 +672,18 @@ export default function WorldMap() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [useItem]);
+
+  // ? key — toggle help overlay
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== '?' && e.key !== 'h' && e.key !== 'H') return;
+      if (e.key === '?') e.shiftKey = true; // ? is Shift+/
+      if (['INPUT', 'TEXTAREA'].includes((document.activeElement as HTMLElement)?.tagName ?? '')) return;
+      setOverlay(overlay === 'help' ? 'none' : 'help');
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [setOverlay, overlay]);
 
   // Render loop — created once
   useEffect(() => {

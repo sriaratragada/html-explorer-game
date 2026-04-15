@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/lib/gameStore';
 import { SEASON_NAMES } from '@/lib/gameData';
@@ -6,8 +7,11 @@ import HudBar from '@/components/game/HudBar';
 import EventPopup from '@/components/game/EventPopup';
 import OverlayPanel from '@/components/game/OverlayPanel';
 import Hotbar from '@/components/game/Hotbar';
+import HelpPanel from '@/components/game/HelpPanel';
 
 export default function GameScreen() {
+  const [showConfirm, setShowConfirm] = useState(false);
+
   const phase     = useGameStore(s => s.phase);
   const chronicle = useGameStore(s => s.chronicle);
   const tick      = useGameStore(s => s.tick);
@@ -22,6 +26,7 @@ export default function GameScreen() {
       <EventPopup />
       <HudBar />
       <OverlayPanel />
+      <HelpPanel />
 
       {/* Death Screen */}
       <AnimatePresence>
@@ -53,11 +58,55 @@ export default function GameScreen() {
                 — Tick {tick}, {SEASON_NAMES[season]} —
               </p>
               <button
-                onClick={startGame}
+                onClick={() => setShowConfirm(true)}
                 className="mt-4 px-8 py-3 border border-blood/30 bg-blood/5 font-display text-xs tracking-[0.2em] text-parchment/70 uppercase hover:bg-blood/15 hover:border-blood/60 transition-all duration-300 cursor-pointer"
               >
                 Begin Again
               </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Confirmation Dialog */}
+      <AnimatePresence>
+        {showConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[110] flex items-center justify-center bg-ink/50 backdrop-blur-sm"
+            onClick={() => setShowConfirm(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="bg-ink border border-gold/30 p-8 max-w-sm mx-4"
+              onClick={e => e.stopPropagation()}
+            >
+              <h3 className="font-display text-lg text-parchment mb-3 tracking-[0.05em]">
+                Restart Your Chronicle?
+              </h3>
+              <p className="text-sm text-mist/70 mb-6 leading-relaxed">
+                Your current journey will be lost. This cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowConfirm(false)}
+                  className="flex-1 px-4 py-2 border border-gold/20 bg-ink/50 font-display text-xs text-mist/70 uppercase tracking-wider hover:border-gold/40 hover:text-mist transition-all duration-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { setShowConfirm(false); startGame(); }}
+                  className="flex-1 px-4 py-2 border border-blood/40 bg-blood/10 font-display text-xs text-parchment/80 uppercase tracking-wider hover:bg-blood/20 hover:border-blood/60 transition-all duration-200 cursor-pointer"
+                >
+                  Confirm
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}

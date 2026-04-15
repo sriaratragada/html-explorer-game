@@ -92,7 +92,7 @@ export interface EnvironmentAction {
   itemReward?: { id: string; name: string; icon: string; quantity: number; type: ItemType; description: string };
 }
 
-export type OverlayType = 'none' | 'player' | 'chronicle' | 'map';
+export type OverlayType = 'none' | 'player' | 'chronicle' | 'map' | 'help';
 
 export type ItemType = 'tool' | 'weapon' | 'resource' | 'food' | 'armor' | 'misc';
 

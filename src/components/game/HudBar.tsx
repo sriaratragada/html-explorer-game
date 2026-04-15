@@ -1,9 +1,16 @@
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/lib/gameStore';
 import { SEASON_NAMES, SEASON_ICONS, REP_LABELS, LOCATIONS, ENVIRONMENT_ACTIONS } from '@/lib/gameData';
 import { LOCATION_COORDS, TileType, TILE_NAMES, MAP_W } from '@/lib/mapGenerator';
 import { getMap } from '@/lib/gameStore';
 
 export default function HudBar() {
+  const [hoverHealth, setHoverHealth] = useState(false);
+  const [hoverHunger, setHoverHunger] = useState(false);
+  const [hoverSeason, setHoverSeason] = useState(false);
+  const [hoverRep, setHoverRep] = useState<string | null>(null);
+
   const season = useGameStore(s => s.season);
   const tick = useGameStore(s => s.tick);
   const playerTitle = useGameStore(s => s.playerTitle);
@@ -62,7 +69,8 @@ export default function HudBar() {
           <div className="flex flex-col gap-1">
             {/* Vital bars */}
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1">
+              {/* Health bar with tooltip */}
+              <div className="flex items-center gap-1 relative" onMouseEnter={() => setHoverHealth(true)} onMouseLeave={() => setHoverHealth(false)}>
                 <span className="text-[11px]">❤️</span>
                 <div className="w-20 h-1.5 bg-ash overflow-hidden border border-gold/10">
                   <div
@@ -71,8 +79,24 @@ export default function HudBar() {
                   />
                 </div>
                 <span className="font-mono text-[8px] text-mist/50">{Math.ceil(health)}</span>
+                {/* Tooltip */}
+                <AnimatePresence>
+                  {hoverHealth && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.12 }}
+                      className="absolute bottom-full mb-1 left-0 bg-ink/95 border border-gold/20 px-2 py-1 rounded text-[8px] text-mist whitespace-nowrap z-50"
+                    >
+                      Health: {Math.ceil(health)}/{maxHealth}. Reaches 0 when starving.
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-              <div className="flex items-center gap-1">
+
+              {/* Hunger bar with tooltip */}
+              <div className="flex items-center gap-1 relative" onMouseEnter={() => setHoverHunger(true)} onMouseLeave={() => setHoverHunger(false)}>
                 <span className="text-[11px]">🍖</span>
                 <div className="w-20 h-1.5 bg-ash overflow-hidden border border-gold/10">
                   <div
@@ -81,16 +105,44 @@ export default function HudBar() {
                   />
                 </div>
                 <span className="font-mono text-[8px] text-mist/50">{Math.ceil(hunger)}</span>
+                {/* Tooltip */}
+                <AnimatePresence>
+                  {hoverHunger && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.12 }}
+                      className="absolute bottom-full mb-1 left-0 bg-ink/95 border border-gold/20 px-2 py-1 rounded text-[8px] text-mist whitespace-nowrap z-50"
+                    >
+                      Hunger: {Math.ceil(hunger)}%. Press E to eat.
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
             {/* Season & location row */}
             <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 relative" onMouseEnter={() => setHoverSeason(true)} onMouseLeave={() => setHoverSeason(false)}>
               <span className="text-sm">{SEASON_ICONS[season]}</span>
               <span className="font-mono-game text-[10px] text-mist uppercase tracking-wider">
                 {SEASON_NAMES[season]}
               </span>
               <span className="font-mono-game text-[9px] text-mist/50">T{tick}</span>
+              {/* Season tooltip */}
+              <AnimatePresence>
+                {hoverSeason && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.12 }}
+                    className="absolute top-full mt-1 left-0 bg-ink/95 border border-gold/20 px-2 py-1 rounded text-[8px] text-mist whitespace-nowrap z-50"
+                  >
+                    {season === 'dark' ? 'Winter: Hunger decays faster (0.75/tick)' : 'Hunger decays at normal rate (0.5/tick)'}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
             {locData && (
               <div className="flex items-center gap-1.5 border-l border-gold/10 pl-4">
@@ -109,9 +161,25 @@ export default function HudBar() {
           {/* Right — rep icons + hotkeys */}
           <div className="flex items-center gap-3">
             {topReps.map(([key, val]) => (
-              <div key={key} className="flex items-center gap-1">
-                <div className={`w-1.5 h-1.5 rounded-full ${REP_LABELS[key]?.color}`} />
-                <span className="font-mono-game text-[9px] text-mist">{val}</span>
+              <div key={key} className="relative" onMouseEnter={() => setHoverRep(key as string)} onMouseLeave={() => setHoverRep(null)}>
+                <div className="flex items-center gap-1">
+                  <div className={`w-1.5 h-1.5 rounded-full ${REP_LABELS[key]?.color}`} />
+                  <span className="font-mono-game text-[9px] text-mist">{val}</span>
+                </div>
+                {/* Rep tooltip */}
+                <AnimatePresence>
+                  {hoverRep === key && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.12 }}
+                      className="absolute top-full mt-1 right-0 bg-ink/95 border border-gold/20 px-2 py-1 rounded text-[8px] text-mist whitespace-nowrap z-50"
+                    >
+                      {REP_LABELS[key]?.label}: {val}/100
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             ))}
             <div className="flex items-center gap-1 border-l border-gold/10 pl-3">
@@ -126,6 +194,12 @@ export default function HudBar() {
                 className="px-2 py-0.5 font-mono-game text-[9px] text-gold/60 hover:text-gold border border-gold/10 hover:border-gold/30 transition-all cursor-pointer"
               >
                 [C]
+              </button>
+              <button
+                onClick={() => setOverlay('help')}
+                className="px-2 py-0.5 font-mono-game text-[9px] text-gold/60 hover:text-gold border border-gold/10 hover:border-gold/30 transition-all cursor-pointer"
+              >
+                [?]
               </button>
             </div>
           </div>
