@@ -46,6 +46,8 @@ export interface Location {
   npcs: string[];
   connections: string[];
   icon: string;
+  mapX?: number;
+  mapY?: number;
 }
 
 export interface ChronicleEntry {
@@ -80,6 +82,7 @@ export interface GameEvent {
 
 export interface GameState {
   phase: 'title' | 'playing' | 'chronicle';
+  isMoving: boolean;
   tick: number;
   season: Season;
   seasonTick: number;

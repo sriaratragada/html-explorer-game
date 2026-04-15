@@ -17,6 +17,7 @@ interface GameStore extends GameState {
 
 export const useGameStore = create<GameStore>((set, get) => ({
   phase: 'title',
+  isMoving: false,
   tick: 0,
   season: 'thaw',
   seasonTick: 0,
@@ -44,6 +45,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     set({
       phase: 'playing',
+      isMoving: false,
       tick: 0,
       season: 'thaw',
       seasonTick: 0,
