@@ -662,7 +662,7 @@ export default function WorldMap() {
   const visitedLocations = useGameStore(s => s.visitedLocations);
   const nearestLocation  = useGameStore(s => s.nearestLocation);
   const movePlayer      = useGameStore(s => s.movePlayer);
-  const consumeItem     = useGameStore(s => s.useItem);
+  const handleUseItem   = useGameStore(s => s.useItem);
   const setOverlay      = useGameStore(s => s.setOverlay);
   const overlay         = useGameStore(s => s.overlay);
 
@@ -722,11 +722,11 @@ export default function WorldMap() {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== 'e' && e.key !== 'E') return;
       if (['INPUT', 'TEXTAREA'].includes((document.activeElement as HTMLElement)?.tagName ?? '')) return;
-      consumeItem();
+      handleUseItem();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [consumeItem]);
+  }, [handleUseItem]);
 
   // ? key — toggle help overlay
   useEffect(() => {

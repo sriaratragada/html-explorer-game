@@ -465,8 +465,8 @@ function generateObjects(tiles: Uint8Array, roads: Uint8Array, out: WorldObject[
   const push = (x: number, y: number, type: WorldObjectType, variant = 0) => {
     if (x >= 0 && x < MAP_W && y >= 0 && y < MAP_H) out.push({ x, y, type, variant });
   };
-  const MIN_DISTRICT_COUNT = 6;
-  const NPC_TO_DISTRICT_RATIO = 2;
+  const SETTLEMENT_MIN_DISTRICT_COUNT_PER_SETTLEMENT = 6;
+  const SETTLEMENT_DISTRICTS_PER_NPC = 2;
 
   const settlementLocations = LOCATIONS.filter(l => Object.hasOwn(SETTLEMENT_PROFILES, l.type));
 
@@ -477,7 +477,10 @@ function generateObjects(tiles: Uint8Array, roads: Uint8Array, out: WorldObject[
     const profile = SETTLEMENT_PROFILES[loc.type as keyof typeof SETTLEMENT_PROFILES];
     if (!profile) continue;
 
-    const districtCount = Math.max(MIN_DISTRICT_COUNT, profile.npcCapacity * NPC_TO_DISTRICT_RATIO);
+    const districtCount = Math.max(
+      SETTLEMENT_MIN_DISTRICT_COUNT_PER_SETTLEMENT,
+      (profile.npcCapacity ?? 0) * SETTLEMENT_DISTRICTS_PER_NPC,
+    );
     for (let i = 0; i < districtCount; i++) {
       const ang = hash(i * 13, loc.id.charCodeAt(0) + 17) * Math.PI * 2;
       const d = 4 + hash(i * 7, loc.id.charCodeAt(1) + 31) * profile.footprintRadius * 0.95;

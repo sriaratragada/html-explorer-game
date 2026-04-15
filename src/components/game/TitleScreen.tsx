@@ -104,13 +104,19 @@ export default function TitleScreen() {
       city: '#e4c987',
       castle: '#f0d89a',
     };
+    const typeRadius: Record<string, number> = {
+      village: 2.8,
+      town: 3.2,
+      city: 4,
+      castle: 3.6,
+    };
 
     for (const loc of LOCATIONS) {
       const c = LOCATION_COORDS[loc.id];
       if (!c) continue;
       const x = (c.x / MAP_W) * width;
       const y = (c.y / MAP_H) * height;
-      const r = loc.type === 'city' ? 4 : loc.type === 'town' ? 3.2 : loc.type === 'castle' ? 3.6 : 2.8;
+      const r = typeRadius[loc.type] ?? 2.8;
 
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
