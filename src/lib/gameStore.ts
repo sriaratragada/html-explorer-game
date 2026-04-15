@@ -17,7 +17,7 @@ interface GameStore extends GameState {
 
 export const useGameStore = create<GameStore>((set, get) => ({
   phase: 'title',
-  tick: 0,
+  isMoving: false,
   season: 'thaw',
   seasonTick: 0,
   reputation: { conquest: 0, trade: 0, craft: 0, diplomacy: 0, exploration: 0, arcane: 0 },
