@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 export default function ChronicleView() {
   const { chronicle, playerTitle } = useGameStore();
   const backToGame = useGameStore(s => s.backToGame);
+  const LORE_PREFIX = '📜 ';
 
   const typeColors: Record<string, string> = {
     action: 'text-parchment',
@@ -59,7 +60,7 @@ export default function ChronicleView() {
                   {typeLabels[entry.type] || entry.type}
                 </p>
                 <p className={`text-[15px] leading-[1.8] italic ${entry.type === 'lore' ? 'text-amber-200/80' : 'text-mist'}`}>
-                  {entry.type === 'lore' ? `📜 ${entry.text}` : entry.text}
+                  {entry.type === 'lore' ? `${LORE_PREFIX}${entry.text}` : entry.text}
                 </p>
               </div>
             </motion.div>
