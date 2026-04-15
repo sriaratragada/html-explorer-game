@@ -465,8 +465,10 @@ function generateObjects(tiles: Uint8Array, roads: Uint8Array, out: WorldObject[
   const push = (x: number, y: number, type: WorldObjectType, variant = 0) => {
     if (x >= 0 && x < MAP_W && y >= 0 && y < MAP_H) out.push({ x, y, type, variant });
   };
+  const MIN_DISTRICT_COUNT = 6;
+  const NPC_TO_DISTRICT_RATIO = 2;
 
-  const settlementLocations = LOCATIONS.filter(l => l.type in SETTLEMENT_PROFILES);
+  const settlementLocations = LOCATIONS.filter(l => Object.hasOwn(SETTLEMENT_PROFILES, l.type));
 
   // Settlement districts by tier so the world reads as a medieval kingdom
   for (const loc of settlementLocations) {
@@ -475,7 +477,7 @@ function generateObjects(tiles: Uint8Array, roads: Uint8Array, out: WorldObject[
     const profile = SETTLEMENT_PROFILES[loc.type as keyof typeof SETTLEMENT_PROFILES];
     if (!profile) continue;
 
-    const districtCount = Math.max(6, profile.npcCapacity * 2);
+    const districtCount = Math.max(MIN_DISTRICT_COUNT, profile.npcCapacity * NPC_TO_DISTRICT_RATIO);
     for (let i = 0; i < districtCount; i++) {
       const ang = hash(i * 13, loc.id.charCodeAt(0) + 17) * Math.PI * 2;
       const d = 4 + hash(i * 7, loc.id.charCodeAt(1) + 31) * profile.footprintRadius * 0.95;
