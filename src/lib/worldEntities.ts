@@ -1,9 +1,12 @@
-import { CHUNK_SIZE, MAP_W, MAP_H, LOCATION_COORDS, getSettlementMeta } from './mapGenerator';
+import { CHUNK_SIZE, MAP_W, MAP_H, LOCATION_COORDS, getSettlementMeta, getTileAt, tileCodeToType } from './mapGenerator';
+import { getHamlets, type HamletArchetype } from './hamlets';
+import { INITIAL_NPCS } from './gameData';
 
 export type EntityKind =
   | 'boat' | 'cave_entrance' | 'resource_tree' | 'resource_rock' | 'resource_iron'
   | 'resource_herb' | 'resource_berry' | 'wolf' | 'bandit' | 'warband'
-  | 'deer' | 'bear' | 'caravan' | 'army' | 'horse' | 'sheep' | 'rabbit';
+  | 'deer' | 'bear' | 'caravan' | 'army' | 'horse' | 'sheep' | 'rabbit'
+  | 'settlement_npc' | 'hamlet_npc';
 
 export interface WorldEntity {
   id: string;
@@ -95,6 +98,16 @@ export function clearAllEntities() {
   nextId = 1;
 }
 
+const WILD_ANIMAL_KINDS: EntityKind[] = ['deer', 'sheep', 'rabbit', 'wolf', 'bear', 'bandit'];
+
+export function countWildlifeEntities(): number {
+  let n = 0;
+  entityById.forEach(e => {
+    if (WILD_ANIMAL_KINDS.includes(e.kind)) n++;
+  });
+  return n;
+}
+
 // Spawn initial world entities (boats at docks, cave entrances)
 export function initWorldEntities() {
   clearAllEntities();
@@ -123,8 +136,8 @@ export function initWorldEntities() {
     return (h & 0x7fffffff) / 0x7fffffff;
   };
 
-  // Cave entrances
-  for (let i = 0; i < 40; i++) {
+  // Cave entrances (random)
+  for (let i = 0; i < 28; i++) {
     const x = Math.floor(hash(i * 137, 9999) * MAP_W);
     const y = Math.floor(hash(i * 251, 8888) * MAP_H);
     if (hash(x, y) < 0.5) {
@@ -141,17 +154,151 @@ export function initWorldEntities() {
     spawnEntity(kind, x, y, {}, 1);
   }
 
-  // Dynamic animals (replacing static AmbientEntity)
-  for (let i = 0; i < 150; i++) {
-    const x = Math.floor(hash(i * 211, 5555) * MAP_W);
-    const y = Math.floor(hash(i * 223, 6666) * MAP_H);
-    const roll = hash(x + 7777, y);
-    if (roll < 0.25) spawnEntity('deer', x, y, { behavior: 'grazing' }, 20);
-    else if (roll < 0.40) spawnEntity('sheep', x, y, { behavior: 'grazing' }, 15);
-    else if (roll < 0.50) spawnEntity('rabbit', x, y, { behavior: 'grazing' }, 8);
-    else if (roll < 0.65) spawnEntity('wolf', x, y, { behavior: 'hunting' }, 40);
-    else if (roll < 0.72) spawnEntity('bear', x, y, { behavior: 'patrol' }, 60);
-    else if (roll < 0.82) spawnEntity('bandit', x, y, { behavior: 'ambush' }, 50);
+  // Dynamic animals (~40 total, biome-aware; static AmbientEntity wildlife removed from mapGenerator)
+  type SpawnSpec = { kind: EntityKind; hp: number; pred: (t: string) => boolean };
+  const specs: SpawnSpec[] = [
+    { kind: 'deer', hp: 20, pred: t => ['forest', 'dense_forest', 'clearing'].includes(t) },
+    { kind: 'sheep', hp: 15, pred: t => ['grass', 'farm_field', 'clearing'].includes(t) },
+    { kind: 'rabbit', hp: 8, pred: t => ['grass', 'clearing', 'hill'].includes(t) },
+    { kind: 'wolf', hp: 40, pred: t => ['dense_forest', 'hill', 'forest'].includes(t) },
+    { kind: 'bear', hp: 60, pred: t => ['forest', 'hill', 'dense_forest'].includes(t) },
+    { kind: 'bandit', hp: 50, pred: t => ['road', 'hill', 'grass', 'ruins'].includes(t) },
+  ];
+  const quota = [10, 8, 5, 8, 4, 5]; // sums to 40
+  for (let si = 0; si < specs.length; si++) {
+    const { kind, hp, pred } = specs[si]!;
+    for (let j = 0; j < quota[si]!; j++) {
+      const i = si * 1000 + j;
+      let placed = false;
+      for (let a = 0; a < 80 && !placed; a++) {
+        const x = Math.floor(hash(i * 173 + a * 17, 3333 + a) * MAP_W);
+        const y = Math.floor(hash(i * 197 + a * 19, 4444 + a) * MAP_H);
+        const tn = tileCodeToType(getTileAt(x, y));
+        if (tn === 'deep_water' || tn === 'water' || tn === 'mountain' || tn === 'snow') continue;
+        if (!pred(tn)) continue;
+        spawnEntity(kind, x, y, { behavior: kind === 'bandit' ? 'ambush' : 'grazing' }, hp);
+        placed = true;
+      }
+      if (!placed) {
+        for (let a = 0; a < 50 && !placed; a++) {
+          const x = Math.floor(hash(i * 131 + a, 1212) * MAP_W);
+          const y = Math.floor(hash(i * 149 + a, 2323) * MAP_H);
+          const tn = tileCodeToType(getTileAt(x, y));
+          if (['grass', 'clearing', 'forest', 'hill'].includes(tn)) {
+            spawnEntity(kind, x, y, { behavior: 'grazing' }, hp);
+            placed = true;
+          }
+        }
+      }
+    }
+  }
+
+  // Guaranteed cave entrances near mountain settlements
+  const caveAnchors = ['ironhold', 'coldpeak', 'korrath_citadel', 'frostmarch', 'deepmine', 'hollowpeak'] as const;
+  for (const lid of caveAnchors) {
+    const c = LOCATION_COORDS[lid];
+    if (!c) continue;
+    const ang = hash(lid.length + 3, 42) * Math.PI * 2;
+    const dist = 16 + hash(42, lid.length + 1) * 14;
+    const x = Math.round(c.x + Math.cos(ang) * dist);
+    const y = Math.round(c.y + Math.sin(ang) * dist);
+    spawnEntity('cave_entrance', x, y, { explored: false, biome: 'mountain', guaranteed: true }, 1);
+  }
+
+  // Starter resources near Ashenford
+  const home = LOCATION_COORDS.ashenford;
+  if (home) {
+    for (let i = 0; i < 5; i++) {
+      const ang = hash(i + 11, 1) * Math.PI * 2;
+      const d = 10 + hash(i + 22, 2) * 36;
+      spawnEntity('resource_tree', Math.round(home.x + Math.cos(ang) * d), Math.round(home.y + Math.sin(ang) * d), { starter: true }, 1);
+    }
+    for (let i = 0; i < 3; i++) {
+      const ang = hash(i + 33, 3) * Math.PI * 2;
+      const d = 14 + hash(i + 44, 4) * 30;
+      spawnEntity('resource_rock', Math.round(home.x + Math.cos(ang) * d), Math.round(home.y + Math.sin(ang) * d), { starter: true }, 1);
+    }
+  }
+
+  const jobFromTitle = (title: string): string => {
+    const t = title.toLowerCase();
+    if (t.includes('guild') || t.includes('broker')) return 'merchant';
+    if (t.includes('captain') || t.includes('watch') || t.includes('sergeant') || t.includes('commander')) return 'guard';
+    if (t.includes('innkeeper') || t.includes('inn')) return 'innkeeper';
+    if (t.includes('archivist') || t.includes('astronomer')) return 'merchant';
+    return 'farmer';
+  };
+
+  for (const npc of INITIAL_NPCS) {
+    const coord = LOCATION_COORDS[npc.location];
+    if (!coord) continue;
+    const ox = Math.round((hash(npc.id.charCodeAt(0), 501) - 0.5) * 26);
+    const oy = Math.round((hash(npc.id.charCodeAt(1), 502) - 0.5) * 26);
+    spawnEntity('settlement_npc', coord.x + ox, coord.y + oy, {
+      npcId: npc.id,
+      name: npc.name,
+      job: jobFromTitle(npc.title),
+      locationId: npc.location,
+    }, 100);
+  }
+
+  const hamletJob = (arch: HamletArchetype): string => {
+    const m: Record<string, string> = {
+      shepherd_camp: 'shepherd', river_hut: 'fisher', logging_stead: 'woodcutter', shrine_waypost: 'caretaker',
+      toll_cabin: 'warden', apiary: 'beekeeper', charcoal_burner: 'burner', wayfarer_camp: 'guide',
+      shearing_shed: 'shearer', orchard_house: 'grower', ferry_house: 'ferryman', salt_boiler: 'boiler',
+    };
+    return m[arch] ?? 'commoner';
+  };
+
+  const forenames = ['Corin', 'Mara', 'Jory', 'Sera', 'Tomas', 'Elka', 'Hen', 'Mira', 'Daveth', 'Ysolde'];
+  for (const h of getHamlets()) {
+    const count = hash(h.x + 9, h.y + 8) > 0.38 ? 2 : 1;
+    for (let slot = 0; slot < count; slot++) {
+      const name = forenames[Math.floor(hash(h.x + slot * 17, h.y + slot * 19) * forenames.length)]!;
+      spawnEntity('hamlet_npc', h.x + 1 + slot * 2, h.y + slot, {
+        hamletId: h.id,
+        hamletName: h.displayName,
+        archetype: h.archetype,
+        minorKey: `${h.id}_${slot}`,
+        name,
+        job: hamletJob(h.archetype),
+        slot,
+      }, 100);
+    }
+  }
+}
+
+/** Respawn 1–2 wild animals far from the player when population is low (deterministic). */
+export function respawnWildlifeFarFrom(px: number, py: number, worldTime: number) {
+  if (countWildlifeEntities() >= 38) return;
+  const hash = (a: number, b: number) => {
+    let h = (a * 374761393 + b * 668265263 + worldTime) & 0xffffffff;
+    h = ((h ^ (h >> 13)) * 1274126177) & 0xffffffff;
+    return (h & 0x7fffffff) / 0x7fffffff;
+  };
+  const rollKind = (r: number): EntityKind => {
+    if (r < 0.28) return 'deer';
+    if (r < 0.48) return 'sheep';
+    if (r < 0.58) return 'rabbit';
+    if (r < 0.78) return 'wolf';
+    if (r < 0.92) return 'bear';
+    return 'bandit';
+  };
+  const toSpawn = 1 + (hash(worldTime, 77) > 0.55 ? 1 : 0);
+  for (let s = 0; s < toSpawn; s++) {
+    for (let a = 0; a < 120; a++) {
+      const x = Math.floor(hash(worldTime + s * 31, a * 59 + 1000) * MAP_W);
+      const y = Math.floor(hash(worldTime + s * 47, a * 61 + 2000) * MAP_H);
+      const d = Math.sqrt((x - px) ** 2 + (y - py) ** 2);
+      if (d < 90) continue;
+      const tn = tileCodeToType(getTileAt(x, y));
+      if (tn === 'deep_water' || tn === 'water' || tn === 'mountain') continue;
+      const kind = rollKind(hash(x, y + s));
+      const hp = kind === 'deer' ? 20 : kind === 'sheep' ? 15 : kind === 'rabbit' ? 8 : kind === 'wolf' ? 40 : kind === 'bear' ? 60 : 50;
+      spawnEntity(kind, x, y, { behavior: 'grazing' }, hp);
+      break;
+    }
   }
 }
 

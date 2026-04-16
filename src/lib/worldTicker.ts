@@ -4,7 +4,7 @@ import { getDayNightPhase, TICKS_PER_DAY } from './timeSystem';
 import { tickMarket } from './economySystem';
 import { tickFaction } from './factionSystem';
 import { refreshBountyBoard } from './bountyBoard';
-import { getEntitiesNear, spawnEntity, moveEntity, getEntitiesInChunk } from './worldEntities';
+import { getEntitiesNear, spawnEntity, moveEntity, respawnWildlifeFarFrom } from './worldEntities';
 import { enemyAttackDamage, getAggroRadius } from './combatSystem';
 import { getTotalArmor } from './craftingSystem';
 import { MAP_W, MAP_H, CHUNK_SIZE, getContinentAt } from './mapGenerator';
@@ -95,6 +95,11 @@ function onTick() {
       const dy = Math.sign(animal.y - state.playerY);
       moveEntity(animal.id, animal.x + dx, animal.y + dy);
     }
+  }
+
+  // Slow wildlife respawn (far from player) when hunted out
+  if (newWorldTime % 100 === 0 && state.phase === 'playing') {
+    respawnWildlifeFarFrom(state.playerX, state.playerY, newWorldTime);
   }
 
   // Resource respawn: small chance each tick to spawn new resources near player's continent

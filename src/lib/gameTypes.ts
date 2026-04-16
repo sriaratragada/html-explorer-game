@@ -121,6 +121,12 @@ export type DayNightPhase = 'dawn' | 'day' | 'dusk' | 'night';
 export type WeatherState = 'clear' | 'cloudy' | 'rain' | 'storm';
 export type MountState = 'none' | 'horse' | 'boat';
 
+export interface MinorNpcState {
+  memories: string[];
+  disposition: number;
+  lastSeenTick: number;
+}
+
 export interface GameState {
   phase: 'title' | 'playing' | 'chronicle' | 'dead' | 'sailing' | 'dungeon';
   health: number;
@@ -168,6 +174,10 @@ export interface GameState {
   // NPCs & dialogue
   npcs: Npc[];
   activeDialogue: DialogueTree | null;
+  /** Hamlet residents + generic keyed dialogue memory */
+  minorNpcState: Record<string, MinorNpcState>;
+  /** 0–4 tutorial steps, 5 = complete */
+  tutorialObjective: number;
 
   // Chronicle & events
   chronicle: ChronicleEntry[];

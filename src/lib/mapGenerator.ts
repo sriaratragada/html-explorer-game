@@ -94,47 +94,48 @@ export interface SettlementMeta {
   biomeRadius: number;
 }
 
+/** biomeRadius = half-width of settlement influence (capital 100 → ~200 tile footprint). */
 const SETTLEMENTS: Record<string, { x: number; y: number } & SettlementMeta> = {
   // ── Auredia (Grand Kingdom) ──
-  highmarch:     { x: 2200, y: 4500, continent: 'auredia', kingdom: 'auredia_crown', type: 'capital',  biomeCode: T.GRASS, biomeRadius: 70 },
-  ashenford:     { x: 1200, y: 3500, continent: 'auredia', kingdom: 'auredia_crown', type: 'village',  biomeCode: T.GRASS, biomeRadius: 55 },
-  saltmoor:      { x: 700,  y: 5500, continent: 'auredia', kingdom: 'auredia_crown', type: 'port',     biomeCode: T.SAND,  biomeRadius: 50 },
-  ironhold:      { x: 1800, y: 2000, continent: 'auredia', kingdom: 'auredia_crown', type: 'fortress', biomeCode: T.MOUNTAIN, biomeRadius: 55 },
-  thornwick:     { x: 2800, y: 5800, continent: 'auredia', kingdom: 'auredia_crown', type: 'village',  biomeCode: T.DENSE_FOREST, biomeRadius: 60 },
-  graygate:      { x: 1600, y: 6200, continent: 'auredia', kingdom: 'auredia_crown', type: 'city',     biomeCode: T.GRASS, biomeRadius: 50 },
-  crossroads:    { x: 2000, y: 3000, continent: 'auredia', kingdom: 'auredia_crown', type: 'inn',      biomeCode: T.GRASS, biomeRadius: 40 },
-  coldpeak:      { x: 1000, y: 1500, continent: 'auredia', kingdom: 'auredia_crown', type: 'fortress', biomeCode: T.SNOW,  biomeRadius: 55 },
-  millhaven:     { x: 2600, y: 4000, continent: 'auredia', kingdom: 'auredia_crown', type: 'village',  biomeCode: T.GRASS, biomeRadius: 45 },
-  brightwater:   { x: 3200, y: 3200, continent: 'auredia', kingdom: 'auredia_crown', type: 'town',     biomeCode: T.GRASS, biomeRadius: 50 },
-  oakshire:      { x: 1400, y: 7500, continent: 'auredia', kingdom: 'auredia_crown', type: 'village',  biomeCode: T.FOREST, biomeRadius: 45 },
-  goldcrest:     { x: 3000, y: 6800, continent: 'auredia', kingdom: 'auredia_crown', type: 'fortress', biomeCode: T.HILL, biomeRadius: 50 },
+  highmarch:     { x: 2200, y: 4500, continent: 'auredia', kingdom: 'auredia_crown', type: 'capital',  biomeCode: T.GRASS, biomeRadius: 100 },
+  ashenford:     { x: 1200, y: 3500, continent: 'auredia', kingdom: 'auredia_crown', type: 'village',  biomeCode: T.GRASS, biomeRadius: 40 },
+  saltmoor:      { x: 700,  y: 5500, continent: 'auredia', kingdom: 'auredia_crown', type: 'port',     biomeCode: T.SAND,  biomeRadius: 70 },
+  ironhold:      { x: 1800, y: 2000, continent: 'auredia', kingdom: 'auredia_crown', type: 'fortress', biomeCode: T.MOUNTAIN, biomeRadius: 90 },
+  thornwick:     { x: 2800, y: 5800, continent: 'auredia', kingdom: 'auredia_crown', type: 'village',  biomeCode: T.DENSE_FOREST, biomeRadius: 40 },
+  graygate:      { x: 1600, y: 6200, continent: 'auredia', kingdom: 'auredia_crown', type: 'city',     biomeCode: T.GRASS, biomeRadius: 75 },
+  crossroads:    { x: 2000, y: 3000, continent: 'auredia', kingdom: 'auredia_crown', type: 'inn',      biomeCode: T.GRASS, biomeRadius: 30 },
+  coldpeak:      { x: 1000, y: 1500, continent: 'auredia', kingdom: 'auredia_crown', type: 'fortress', biomeCode: T.SNOW,  biomeRadius: 90 },
+  millhaven:     { x: 2600, y: 4000, continent: 'auredia', kingdom: 'auredia_crown', type: 'village',  biomeCode: T.GRASS, biomeRadius: 40 },
+  brightwater:   { x: 3200, y: 3200, continent: 'auredia', kingdom: 'auredia_crown', type: 'town',     biomeCode: T.GRASS, biomeRadius: 55 },
+  oakshire:      { x: 1400, y: 7500, continent: 'auredia', kingdom: 'auredia_crown', type: 'village',  biomeCode: T.FOREST, biomeRadius: 40 },
+  goldcrest:     { x: 3000, y: 6800, continent: 'auredia', kingdom: 'auredia_crown', type: 'fortress', biomeCode: T.HILL, biomeRadius: 90 },
 
   // ── Trivalen — Korrath (north mountains) ──
-  korrath_citadel: { x: 5500, y: 2200, continent: 'trivalen', kingdom: 'korrath', type: 'capital',  biomeCode: T.MOUNTAIN, biomeRadius: 60 },
-  frostmarch:      { x: 5000, y: 1500, continent: 'trivalen', kingdom: 'korrath', type: 'fortress', biomeCode: T.SNOW, biomeRadius: 50 },
-  deepmine:        { x: 6200, y: 1800, continent: 'trivalen', kingdom: 'korrath', type: 'village',  biomeCode: T.HILL, biomeRadius: 45 },
+  korrath_citadel: { x: 5500, y: 2200, continent: 'trivalen', kingdom: 'korrath', type: 'capital',  biomeCode: T.MOUNTAIN, biomeRadius: 100 },
+  frostmarch:      { x: 5000, y: 1500, continent: 'trivalen', kingdom: 'korrath', type: 'fortress', biomeCode: T.SNOW, biomeRadius: 90 },
+  deepmine:        { x: 6200, y: 1800, continent: 'trivalen', kingdom: 'korrath', type: 'village',  biomeCode: T.HILL, biomeRadius: 40 },
 
   // ── Trivalen — Vell (south coast) ──
-  vell_harbor:  { x: 5200, y: 7500, continent: 'trivalen', kingdom: 'vell', type: 'capital', biomeCode: T.SAND, biomeRadius: 55 },
-  sunfield:     { x: 5800, y: 7000, continent: 'trivalen', kingdom: 'vell', type: 'village', biomeCode: T.GRASS, biomeRadius: 45 },
-  coral_cove:   { x: 4800, y: 8000, continent: 'trivalen', kingdom: 'vell', type: 'port',    biomeCode: T.SAND, biomeRadius: 40 },
+  vell_harbor:  { x: 5200, y: 7500, continent: 'trivalen', kingdom: 'vell', type: 'capital', biomeCode: T.SAND, biomeRadius: 100 },
+  sunfield:     { x: 5800, y: 7000, continent: 'trivalen', kingdom: 'vell', type: 'village', biomeCode: T.GRASS, biomeRadius: 40 },
+  coral_cove:   { x: 4800, y: 8000, continent: 'trivalen', kingdom: 'vell', type: 'port',    biomeCode: T.SAND, biomeRadius: 70 },
 
   // ── Trivalen — Sarnak (east steppe) ──
-  sarnak_hold:  { x: 7000, y: 4500, continent: 'trivalen', kingdom: 'sarnak', type: 'capital',  biomeCode: T.GRASS, biomeRadius: 55 },
-  windridge:    { x: 7200, y: 3000, continent: 'trivalen', kingdom: 'sarnak', type: 'fortress', biomeCode: T.HILL, biomeRadius: 50 },
+  sarnak_hold:  { x: 7000, y: 4500, continent: 'trivalen', kingdom: 'sarnak', type: 'capital',  biomeCode: T.GRASS, biomeRadius: 100 },
+  windridge:    { x: 7200, y: 3000, continent: 'trivalen', kingdom: 'sarnak', type: 'fortress', biomeCode: T.HILL, biomeRadius: 90 },
   dustplain:    { x: 6800, y: 5500, continent: 'trivalen', kingdom: 'sarnak', type: 'village',  biomeCode: T.GRASS, biomeRadius: 40 },
 
   // ── Trivalen — contested ──
   dustfall:  { x: 6000, y: 4800, continent: 'trivalen', kingdom: 'contested', type: 'ruins',      biomeCode: T.RUINS, biomeRadius: 45 },
-  marshend:  { x: 5200, y: 5200, continent: 'trivalen', kingdom: 'contested', type: 'village',    biomeCode: T.SWAMP, biomeRadius: 50 },
-  badlands:  { x: 6500, y: 6000, continent: 'trivalen', kingdom: 'contested', type: 'wilderness', biomeCode: T.HILL, biomeRadius: 60 },
+  marshend:  { x: 5200, y: 5200, continent: 'trivalen', kingdom: 'contested', type: 'village',    biomeCode: T.SWAMP, biomeRadius: 40 },
+  badlands:  { x: 6500, y: 6000, continent: 'trivalen', kingdom: 'contested', type: 'wilderness', biomeCode: T.HILL, biomeRadius: 55 },
 
   // ── Uloren (unexplored) ──
-  mistwood:       { x: 8600, y: 4000, continent: 'uloren', kingdom: 'unknown', type: 'village',  biomeCode: T.DENSE_FOREST, biomeRadius: 35 },
+  mistwood:       { x: 8600, y: 4000, continent: 'uloren', kingdom: 'unknown', type: 'village',  biomeCode: T.DENSE_FOREST, biomeRadius: 40 },
   ruins_of_aether:{ x: 9200, y: 5500, continent: 'uloren', kingdom: 'unknown', type: 'ruins',    biomeCode: T.RUINS, biomeRadius: 45 },
-  shadowfen:      { x: 8400, y: 7000, continent: 'uloren', kingdom: 'unknown', type: 'village',  biomeCode: T.SWAMP, biomeRadius: 35 },
-  whisper_stones: { x: 9000, y: 3000, continent: 'uloren', kingdom: 'unknown', type: 'ruins',    biomeCode: T.RUINS, biomeRadius: 40 },
-  hollowpeak:     { x: 9500, y: 6500, continent: 'uloren', kingdom: 'unknown', type: 'village',  biomeCode: T.MOUNTAIN, biomeRadius: 30 },
+  shadowfen:      { x: 8400, y: 7000, continent: 'uloren', kingdom: 'unknown', type: 'village',  biomeCode: T.SWAMP, biomeRadius: 40 },
+  whisper_stones: { x: 9000, y: 3000, continent: 'uloren', kingdom: 'unknown', type: 'ruins',    biomeCode: T.RUINS, biomeRadius: 45 },
+  hollowpeak:     { x: 9500, y: 6500, continent: 'uloren', kingdom: 'unknown', type: 'village',  biomeCode: T.MOUNTAIN, biomeRadius: 40 },
 };
 
 export const LOCATION_COORDS: Record<string, { x: number; y: number }> =
@@ -269,7 +270,7 @@ function bresenhamLine(x0: number, y0: number, x1: number, y1: number): [number,
   return pts;
 }
 
-function ensureRoads(): Set<number> {
+export function ensureRoads(): Set<number> {
   if (_roadSet) return _roadSet;
   _roadSet = new Set<number>();
   for (const [a, b] of CONNECTIONS) {
@@ -395,7 +396,10 @@ function isFarmField(x: number, y: number, nearSettlements: [string, typeof SETT
     if (s.type !== 'village' && s.type !== 'capital' && s.type !== 'inn' && s.type !== 'town') continue;
     const dx = x - s.x, dy = y - s.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < 25 || dist > 90) continue;
+    const R = s.biomeRadius;
+    const inner = Math.max(18, R * 0.22);
+    const outer = R * 1.12;
+    if (dist < inner || dist > outer) continue;
     // Farm patches are hash-determined
     if (hash(Math.floor(x / 8) * 31 + id.charCodeAt(0), Math.floor(y / 8) * 37) < 0.12) return true;
   }
@@ -472,6 +476,7 @@ function generateChunkObjects(
   const inChunk = (x: number, y: number) => x >= ox && x < ox + CHUNK_SIZE && y >= oy && y < oy + CHUNK_SIZE;
 
   for (const [id, s] of nearby) {
+    const R = s.biomeRadius;
     const sc = { x: s.x, y: s.y };
 
     // Wells at every settlement
@@ -479,26 +484,30 @@ function generateChunkObjects(
 
     // Huts and fences for villages/towns/capitals
     if (['village', 'town', 'capital', 'inn'].includes(s.type)) {
-      for (let i = 0; i < 10; i++) {
+      const hutN = Math.min(95, Math.max(6, Math.round(6 + R * 0.42)));
+      for (let i = 0; i < hutN; i++) {
         const ang = hash(i * 9, id.charCodeAt(0)) * Math.PI * 2;
-        const d = 8 + hash(i, id.charCodeAt(1)) * 28;
+        const d = Math.max(6, R * 0.12) + hash(i, id.charCodeAt(1)) * R * 0.78;
         const hx = Math.round(sc.x + Math.cos(ang) * d);
         const hy = Math.round(sc.y + Math.sin(ang) * d);
         if (inChunk(hx, hy)) out.push({ x: hx, y: hy, type: 'hut', variant: i % 4 });
       }
-      for (let i = 0; i < 20; i++) {
-        const ang = (i / 20) * Math.PI * 2;
-        const fx = Math.round(sc.x + Math.cos(ang) * 35);
-        const fy = Math.round(sc.y + Math.sin(ang) * 35);
+      const fenceN = Math.min(140, Math.max(14, Math.round(14 + R * 0.55)));
+      const fenceR = R * 0.84;
+      for (let i = 0; i < fenceN; i++) {
+        const ang = (i / fenceN) * Math.PI * 2;
+        const fx = Math.round(sc.x + Math.cos(ang) * fenceR);
+        const fy = Math.round(sc.y + Math.sin(ang) * fenceR);
         if (inChunk(fx, fy)) out.push({ x: fx, y: fy, type: 'fence', variant: i % 2 });
       }
     }
 
     // Farms around agricultural settlements
     if (['village', 'capital', 'inn', 'town'].includes(s.type)) {
-      for (let i = 0; i < 10; i++) {
+      const farmN = Math.min(55, Math.max(6, Math.round(6 + R * 0.28)));
+      for (let i = 0; i < farmN; i++) {
         const ang = hash(i + id.length * 3, i * 7) * Math.PI * 2;
-        const d = 18 + hash(i * 3, i * 11 + id.charCodeAt(0)) * 55;
+        const d = R * 0.35 + hash(i * 3, i * 11 + id.charCodeAt(0)) * R * 1.05;
         const fx = Math.round(sc.x + Math.cos(ang) * d);
         const fy = Math.round(sc.y + Math.sin(ang) * d);
         if (!inChunk(fx, fy)) continue;
@@ -512,9 +521,10 @@ function generateChunkObjects(
 
     // Market stalls at trade cities/ports
     if (['city', 'port', 'capital'].includes(s.type)) {
-      for (let i = 0; i < 8; i++) {
+      const stallN = Math.min(36, Math.max(5, Math.round(5 + R * 0.22)));
+      for (let i = 0; i < stallN; i++) {
         const ang = hash(i * 5, id.charCodeAt(0)) * Math.PI * 2;
-        const d = 6 + hash(i * 7, id.charCodeAt(1)) * 18;
+        const d = Math.max(4, R * 0.08) + hash(i * 7, id.charCodeAt(1)) * R * 0.35;
         const mx = Math.round(sc.x + Math.cos(ang) * d);
         const my = Math.round(sc.y + Math.sin(ang) * d);
         if (inChunk(mx, my)) out.push({ x: mx, y: my, type: 'market_stall', variant: i % 4 });
@@ -523,52 +533,64 @@ function generateChunkObjects(
 
     // Watchtowers and walls at fortresses/capitals
     if (['fortress', 'capital'].includes(s.type)) {
-      for (let i = 0; i < 4; i++) {
-        const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
-        const wx = Math.round(sc.x + Math.cos(ang) * 22);
-        const wy = Math.round(sc.y + Math.sin(ang) * 22);
+      const towerN = Math.min(14, Math.max(4, Math.round(3 + R / 28)));
+      for (let i = 0; i < towerN; i++) {
+        const ang = (i / towerN) * Math.PI * 2 + Math.PI / 4;
+        const wr = R * 0.26;
+        const wx = Math.round(sc.x + Math.cos(ang) * wr);
+        const wy = Math.round(sc.y + Math.sin(ang) * wr);
         if (inChunk(wx, wy)) out.push({ x: wx, y: wy, type: 'watchtower', variant: i % 2 });
       }
-      for (let i = 0; i < 28; i++) {
-        const ang = (i / 28) * Math.PI * 2;
-        const wx = Math.round(sc.x + Math.cos(ang) * 17);
-        const wy = Math.round(sc.y + Math.sin(ang) * 17);
+      const wallSegs = Math.min(96, Math.max(24, Math.round(22 + R * 0.55)));
+      const wallR = R * 0.2;
+      for (let i = 0; i < wallSegs; i++) {
+        const ang = (i / wallSegs) * Math.PI * 2;
+        const wx = Math.round(sc.x + Math.cos(ang) * wallR);
+        const wy = Math.round(sc.y + Math.sin(ang) * wallR);
         if (inChunk(wx, wy)) out.push({ x: wx, y: wy, type: 'stone_wall', variant: i % 4 });
       }
-      if (inChunk(sc.x, sc.y + 18)) out.push({ x: sc.x, y: sc.y + 18, type: 'gate', variant: 0 });
+      const gateY = Math.round(sc.y + R * 0.2);
+      if (inChunk(sc.x, gateY)) out.push({ x: sc.x, y: gateY, type: 'gate', variant: 0 });
     }
 
     // Ruins at ruin sites
     if (s.type === 'ruins') {
-      for (let i = 0; i < 20; i++) {
+      const pillarN = Math.min(48, Math.max(10, Math.round(10 + R * 0.35)));
+      for (let i = 0; i < pillarN; i++) {
         const ang = hash(i * 11, id.charCodeAt(0)) * Math.PI * 2;
-        const d = 6 + hash(i * 13, id.charCodeAt(1)) * 40;
+        const d = 6 + hash(i * 13, id.charCodeAt(1)) * R * 0.85;
         const rx = Math.round(sc.x + Math.cos(ang) * d);
         const ry = Math.round(sc.y + Math.sin(ang) * d);
         if (inChunk(rx, ry)) out.push({ x: rx, y: ry, type: 'ruins_pillar', variant: i % 4 });
       }
-      for (let i = 0; i < 10; i++) {
-        const ang = (i / 10) * Math.PI * 2;
-        const rx = Math.round(sc.x + Math.cos(ang) * 14);
-        const ry = Math.round(sc.y + Math.sin(ang) * 14);
+      const circleN = Math.min(22, Math.max(8, Math.round(8 + R * 0.12)));
+      const circleR = R * 0.22;
+      for (let i = 0; i < circleN; i++) {
+        const ang = (i / circleN) * Math.PI * 2;
+        const rx = Math.round(sc.x + Math.cos(ang) * circleR);
+        const ry = Math.round(sc.y + Math.sin(ang) * circleR);
         if (inChunk(rx, ry)) out.push({ x: rx, y: ry, type: 'stone_circle', variant: i % 2 });
       }
-      if (inChunk(sc.x, sc.y - 6)) out.push({ x: sc.x, y: sc.y - 6, type: 'shrine', variant: 0 });
+      const shrY = Math.round(sc.y - R * 0.12);
+      if (inChunk(sc.x, shrY)) out.push({ x: sc.x, y: shrY, type: 'shrine', variant: 0 });
     }
 
     // Docks at ports
     if (s.type === 'port') {
-      for (let i = 0; i < 6; i++) {
-        const dx = sc.x - 18 + i * 5, dy = sc.y + 6 + i * 2;
+      const dockN = Math.min(14, Math.max(5, Math.round(5 + R * 0.1)));
+      for (let i = 0; i < dockN; i++) {
+        const dx = sc.x - Math.round(R * 0.22) + i * Math.round(4 + R * 0.04);
+        const dy = sc.y + Math.round(R * 0.08) + i * 2;
         if (inChunk(dx, dy)) out.push({ x: dx, y: dy, type: 'dock', variant: i % 3 });
       }
     }
 
     // Windmills near villages
     if (['village', 'town'].includes(s.type)) {
-      for (let i = 0; i < 3; i++) {
+      const wmN = Math.min(8, Math.max(2, Math.round(2 + R / 45)));
+      for (let i = 0; i < wmN; i++) {
         const ang = hash(i * 17, id.charCodeAt(0) + 60) * Math.PI * 2;
-        const d = 35 + hash(i * 23, id.charCodeAt(1)) * 70;
+        const d = R * 0.55 + hash(i * 23, id.charCodeAt(1)) * R * 1.1;
         const wx = Math.round(sc.x + Math.cos(ang) * d);
         const wy = Math.round(sc.y + Math.sin(ang) * d);
         if (inChunk(wx, wy)) out.push({ x: wx, y: wy, type: 'windmill', variant: i % 2 });
@@ -595,7 +617,7 @@ function generateChunkEntities(
 ) {
   const ox = cx * CHUNK_SIZE, oy = cy * CHUNK_SIZE;
 
-  // Wildlife based on biome (sample every 4th tile for density control)
+  // Ambient critters only (deer/sheep/rabbit/wolves are dynamic WorldEntity spawns)
   for (let ty = 0; ty < CHUNK_SIZE; ty += 4) {
     for (let tx = 0; tx < CHUNK_SIZE; tx += 4) {
       const wx = ox + tx, wy = oy + ty;
@@ -603,21 +625,13 @@ function generateChunkEntities(
       const h = hash(wx * 37 + wy * 53, 7777);
       const h2 = hash(wx * 41, wy * 59);
 
-      if ((code === T.FOREST || code === T.CLEARING) && h < 0.06)
-        out.push({ x: wx, y: wy, type: 'deer', speed: 0.25 + h2 * 0.3, phase: h2 * Math.PI * 2, radius: 10 });
-      else if (code === T.DENSE_FOREST && h < 0.03)
-        out.push({ x: wx, y: wy, type: 'wolf', speed: 0.4 + h2 * 0.4, phase: h2 * Math.PI * 2, radius: 14 });
-      else if ((code === T.GRASS || code === T.FARM_FIELD) && h < 0.04)
-        out.push({ x: wx, y: wy, type: 'sheep', speed: 0.08 + h2 * 0.14, phase: h2 * Math.PI * 2, radius: 6 });
-      else if ((code === T.CLEARING || code === T.GRASS) && h > 0.93)
-        out.push({ x: wx, y: wy, type: 'rabbit', speed: 0.7 + h2 * 0.5, phase: h2 * Math.PI * 2, radius: 5 });
-      else if ((code === T.MOUNTAIN || code === T.SNOW || code === T.HILL) && h < 0.015)
+      if ((code === T.MOUNTAIN || code === T.SNOW || code === T.HILL) && h < 0.008)
         out.push({ x: wx, y: wy, type: 'eagle', speed: 0.5 + h2 * 0.4, phase: h2 * Math.PI * 2, radius: 24 });
-      else if ((code === T.RIVER || code === T.WATER) && h < 0.04)
+      else if ((code === T.RIVER || code === T.WATER) && h < 0.025)
         out.push({ x: wx, y: wy, type: 'fish', speed: 0.3 + h2 * 0.3, phase: h2 * Math.PI * 2, radius: 7 });
-      else if ((code === T.FOREST || code === T.HILL) && h > 0.96)
+      else if ((code === T.FOREST || code === T.HILL) && h > 0.97)
         out.push({ x: wx, y: wy, type: 'crow', speed: 0.6 + h2 * 0.4, phase: h2 * Math.PI * 2, radius: 18 });
-      else if ((code === T.SAND || code === T.RIVER) && h < 0.02)
+      else if ((code === T.SAND || code === T.RIVER) && h < 0.012)
         out.push({ x: wx, y: wy, type: 'fisherman', speed: 0.03 + h2 * 0.04, phase: h2 * Math.PI * 2, radius: 4 });
     }
   }
@@ -625,11 +639,14 @@ function generateChunkEntities(
   // Settlement entities (villagers, guards, merchants)
   for (const [id, s] of nearby) {
     const inChunk = (x: number, y: number) => x >= ox && x < ox + CHUNK_SIZE && y >= oy && y < oy + CHUNK_SIZE;
+    const R = s.biomeRadius;
 
     if (['village', 'town', 'city', 'capital', 'inn', 'port'].includes(s.type)) {
-      for (let i = 0; i < 10; i++) {
-        const vx = s.x + Math.round((hash(i * 3, id.charCodeAt(0)) - 0.5) * 40);
-        const vy = s.y + Math.round((hash(i * 7, id.charCodeAt(1)) - 0.5) * 40);
+      const nV = Math.min(55, Math.max(4, Math.round(4 + R * 0.22)));
+      const spread = R * 0.72;
+      for (let i = 0; i < nV; i++) {
+        const vx = s.x + Math.round((hash(i * 3, id.charCodeAt(0)) - 0.5) * spread * 2);
+        const vy = s.y + Math.round((hash(i * 7, id.charCodeAt(1)) - 0.5) * spread * 2);
         if (!inChunk(vx, vy)) continue;
         out.push({
           x: vx, y: vy, type: 'villager',
@@ -640,10 +657,12 @@ function generateChunkEntities(
     }
 
     if (['fortress', 'capital'].includes(s.type)) {
-      for (let i = 0; i < 8; i++) {
-        const ang = (i / 8) * Math.PI * 2;
-        const gx = Math.round(s.x + Math.cos(ang) * 20);
-        const gy = Math.round(s.y + Math.sin(ang) * 20);
+      const nG = Math.min(28, Math.max(4, Math.round(4 + R / 20)));
+      const gR = R * 0.22;
+      for (let i = 0; i < nG; i++) {
+        const ang = (i / nG) * Math.PI * 2;
+        const gx = Math.round(s.x + Math.cos(ang) * gR);
+        const gy = Math.round(s.y + Math.sin(ang) * gR);
         if (!inChunk(gx, gy)) continue;
         out.push({ x: gx, y: gy, type: 'guard', speed: 0.18, phase: ang, radius: 6 });
       }

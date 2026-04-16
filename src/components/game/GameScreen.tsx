@@ -37,9 +37,25 @@ export default function GameScreen() {
   const season    = useGameStore(s => s.season);
   const startGame = useGameStore(s => s.startGame);
   const lastEntry = chronicle[chronicle.length - 1] ?? null;
+  const tutorialObjective = useGameStore(s => s.tutorialObjective);
+
+  const tutorialLines = [
+    'Gather wood from trees (E) — you need 3 wood for a club.',
+    'Craft a Wooden Club at the crafting panel (K).',
+    'Hunt a deer, sheep, or rabbit (J when facing them).',
+    'Cook raw meat into cooked meat (K → Cook).',
+    'Travel to a major settlement (not just a hamlet).',
+  ];
 
   return (
     <div className="relative w-full h-full overflow-hidden">
+      {phase !== 'title' && phase !== 'dead' && tutorialObjective < 5 && tutorialLines[tutorialObjective] && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[60] max-w-lg px-4 py-1.5 rounded border border-gold/25 bg-ink/90 backdrop-blur-sm pointer-events-none">
+          <p className="font-mono-game text-[10px] text-gold/90 text-center leading-snug">
+            {tutorialLines[tutorialObjective]}
+          </p>
+        </div>
+      )}
       {phase === 'dungeon' ? (
         <DungeonView />
       ) : (

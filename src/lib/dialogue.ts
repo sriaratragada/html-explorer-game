@@ -1,3 +1,5 @@
+import { INITIAL_NPCS } from './gameData';
+
 export interface DialogueOption {
   id: string;
   text: string;
@@ -26,7 +28,7 @@ export interface DialogueTree {
 }
 
 // Templates for job-based NPCs
-function genericDialogue(npcId: string, name: string, job: string): DialogueTree {
+export function genericDialogue(npcId: string, name: string, job: string): DialogueTree {
   const greetings: Record<string, string> = {
     farmer: `${name} wipes dirt from their hands. "Aye? What d'you need?"`,
     merchant: `${name} looks up from their ledger. "Buying or selling?"`,
@@ -116,6 +118,18 @@ export const DIALOGUE_TREES: Record<string, DialogueTree> = {
   guildmaster_renn: genericDialogue('guildmaster_renn', 'Guildmaster Renn', 'merchant'),
 };
 
+function jobFromNpcTitle(title: string): string {
+  const t = title.toLowerCase();
+  if (t.includes('guild') || t.includes('broker')) return 'merchant';
+  if (t.includes('captain') || t.includes('watch') || t.includes('sergeant') || t.includes('commander')) return 'guard';
+  if (t.includes('innkeeper') || t.includes('inn')) return 'innkeeper';
+  if (t.includes('archivist') || t.includes('astronomer')) return 'merchant';
+  return 'farmer';
+}
+
 export function getDialogueTree(npcId: string): DialogueTree | undefined {
-  return DIALOGUE_TREES[npcId];
+  if (DIALOGUE_TREES[npcId]) return DIALOGUE_TREES[npcId];
+  const n = INITIAL_NPCS.find(x => x.id === npcId);
+  if (!n) return undefined;
+  return genericDialogue(npcId, n.name, jobFromNpcTitle(n.title));
 }

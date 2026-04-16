@@ -1,6 +1,12 @@
 import { getWeaponDamage, getTotalArmor, Inventory } from './craftingSystem';
 import { SkillTree } from './skills';
-import { WorldEntity, getEntitiesNear, removeEntity } from './worldEntities';
+import { WorldEntity, getEntitiesNear, removeEntity, EntityKind } from './worldEntities';
+
+export interface KillLoot {
+  items: { itemId: string; qty: number }[];
+  /** Added directly to player gold (separate from gold_coin stacks) */
+  gold: number;
+}
 
 export interface CombatResult {
   hit: boolean;
@@ -8,6 +14,45 @@ export interface CombatResult {
   killed: boolean;
   targetId: string;
   xpGain: number;
+  targetKind?: EntityKind;
+  loot?: KillLoot;
+}
+
+const HUNTABLE_AND_HOSTILE: EntityKind[] = [
+  'wolf', 'bandit', 'warband', 'bear', 'deer', 'sheep', 'rabbit',
+];
+
+/** Loot when a kill is confirmed (called with kind before entity removal). */
+export function getKillLoot(kind: EntityKind, seed = 0): KillLoot {
+  const r = (n: number) => ((seed * 9301 + 49297 + n * 233280) % 233280) / 233280;
+  switch (kind) {
+    case 'deer':
+      return { items: [{ itemId: 'raw_meat', qty: 2 }, { itemId: 'leather', qty: 1 }], gold: 0 };
+    case 'sheep':
+      return { items: [{ itemId: 'raw_meat', qty: 1 }, { itemId: 'cloth', qty: 2 }], gold: 0 };
+    case 'rabbit':
+      return { items: [{ itemId: 'raw_meat', qty: 1 }], gold: 0 };
+    case 'wolf':
+      return { items: [{ itemId: 'leather', qty: 1 + (r(1) > 0.5 ? 1 : 0) }], gold: 0 };
+    case 'bear':
+      return { items: [{ itemId: 'raw_meat', qty: 2 + (r(2) > 0.4 ? 1 : 0) }, { itemId: 'leather', qty: 2 }], gold: 0 };
+    case 'bandit': {
+      const coins = 5 + Math.floor(r(3) * 12);
+      const extras = ['herb', 'cloth', 'salt'] as const;
+      const ex = extras[Math.floor(r(4) * extras.length)];
+      return { items: [{ itemId: 'gold_coin', qty: coins }, { itemId: ex, qty: 1 + Math.floor(r(5) * 2) }], gold: 8 + Math.floor(r(6) * 20) };
+    }
+    case 'warband':
+      return {
+        items: [
+          { itemId: 'gold_coin', qty: 15 + Math.floor(r(7) * 25) },
+          { itemId: 'iron_ore', qty: 1 + Math.floor(r(8) * 2) },
+        ],
+        gold: 25 + Math.floor(r(9) * 40),
+      };
+    default:
+      return { items: [], gold: 0 };
+  }
 }
 
 export function playerAttack(
@@ -18,7 +63,7 @@ export function playerAttack(
 ): CombatResult | null {
   const attackRange = 3;
   const enemies = getEntitiesNear(px, py, attackRange)
-    .filter(e => ['wolf', 'bandit', 'warband', 'bear'].includes(e.kind));
+    .filter(e => HUNTABLE_AND_HOSTILE.includes(e.kind));
 
   if (enemies.length === 0) return null;
 
@@ -48,15 +93,23 @@ export function playerAttack(
 
   best.hp -= totalDamage;
   const killed = best.hp <= 0;
-  if (killed) removeEntity(best.id);
+  const targetKind = best.kind;
+  let loot: KillLoot | undefined;
+  if (killed) {
+    loot = getKillLoot(best.kind, best.x * 1000 + best.y);
+    removeEntity(best.id);
+  }
 
   const xpGain = killed ? getKillXp(best.kind) : Math.floor(totalDamage * 0.5);
 
-  return { hit: true, damage: totalDamage, killed, targetId: best.id, xpGain };
+  return { hit: true, damage: totalDamage, killed, targetId: best.id, xpGain, targetKind, loot };
 }
 
 function getKillXp(kind: string): number {
   switch (kind) {
+    case 'deer': return 6;
+    case 'sheep': return 5;
+    case 'rabbit': return 4;
     case 'wolf': return 15;
     case 'bandit': return 25;
     case 'warband': return 50;
@@ -72,6 +125,10 @@ export function enemyAttackDamage(enemy: WorldEntity, playerArmor: number): numb
     case 'bandit': baseDmg = 8; break;
     case 'warband': baseDmg = 15; break;
     case 'bear': baseDmg = 12; break;
+    case 'deer':
+    case 'sheep':
+    case 'rabbit':
+      return 0;
   }
   return Math.max(1, baseDmg - Math.floor(playerArmor * 0.5));
 }
@@ -82,6 +139,10 @@ export function getAggroRadius(enemy: WorldEntity): number {
     case 'bandit': return 12;
     case 'warband': return 15;
     case 'bear': return 6;
+    case 'deer':
+    case 'sheep':
+    case 'rabbit':
+      return 0;
     default: return 10;
   }
 }

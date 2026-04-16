@@ -1,6 +1,82 @@
 import { motion } from 'framer-motion';
 import { useGameStore } from '@/lib/gameStore';
 import { useEffect, useRef } from 'react';
+import { MAP_W, MAP_H, LOCATION_COORDS, getContinentAt } from '@/lib/mapGenerator';
+import { getHamlets } from '@/lib/hamlets';
+import { LOCATIONS } from '@/lib/gameData';
+
+const CONTINENT_COLORS: Record<string, string> = {
+  auredia: '#2a4a2a',
+  trivalen: '#4a3a28',
+  uloren: '#1a2a38',
+};
+
+const ROADS: [string, string][] = [
+  ['highmarch', 'ashenford'], ['highmarch', 'millhaven'], ['highmarch', 'graygate'], ['highmarch', 'brightwater'],
+  ['ashenford', 'crossroads'], ['ashenford', 'saltmoor'], ['saltmoor', 'graygate'], ['saltmoor', 'oakshire'],
+  ['ironhold', 'crossroads'], ['ironhold', 'coldpeak'], ['ironhold', 'brightwater'],
+  ['thornwick', 'graygate'], ['thornwick', 'goldcrest'], ['graygate', 'oakshire'], ['graygate', 'goldcrest'],
+  ['crossroads', 'millhaven'], ['brightwater', 'millhaven'],
+  ['korrath_citadel', 'frostmarch'], ['korrath_citadel', 'deepmine'], ['korrath_citadel', 'dustfall'],
+  ['vell_harbor', 'sunfield'], ['vell_harbor', 'coral_cove'], ['sunfield', 'badlands'],
+  ['sarnak_hold', 'windridge'], ['sarnak_hold', 'dustplain'], ['dustplain', 'dustfall'],
+  ['dustfall', 'marshend'], ['marshend', 'badlands'], ['marshend', 'sunfield'],
+];
+
+function drawWorldPreview(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  ctx.fillStyle = '#050508';
+  ctx.fillRect(0, 0, w, h);
+
+  for (let cy = 0; cy < h; cy += 2) {
+    for (let cx = 0; cx < w; cx += 2) {
+      const wx = Math.floor((cx / w) * MAP_W);
+      const wy = Math.floor((cy / h) * MAP_H);
+      const cont = getContinentAt(wx, wy);
+      if (cont) {
+        ctx.fillStyle = CONTINENT_COLORS[cont] ?? '#222';
+        ctx.fillRect(cx, cy, 2.5, 2.5);
+      }
+    }
+  }
+
+  ctx.strokeStyle = 'rgba(160,140,90,0.25)';
+  ctx.lineWidth = 1;
+  for (const [a, b] of ROADS) {
+    const ca = LOCATION_COORDS[a];
+    const cb = LOCATION_COORDS[b];
+    if (!ca || !cb) continue;
+    ctx.beginPath();
+    ctx.moveTo((ca.x / MAP_W) * w, (ca.y / MAP_H) * h);
+    ctx.lineTo((cb.x / MAP_W) * w, (cb.y / MAP_H) * h);
+    ctx.stroke();
+  }
+
+  for (const loc of LOCATIONS) {
+    const c = LOCATION_COORDS[loc.id];
+    if (!c) continue;
+    const sx = (c.x / MAP_W) * w;
+    const sy = (c.y / MAP_H) * h;
+    ctx.fillStyle = 'rgba(200,170,90,0.55)';
+    ctx.beginPath();
+    ctx.arc(sx, sy, loc.type === 'city' || loc.id.includes('highmarch') || loc.id.includes('harbor') || loc.id.includes('hold') ? 3 : 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  let hCount = 0;
+  for (const ham of getHamlets()) {
+    if (hCount++ > 400) break;
+    const sx = (ham.x / MAP_W) * w;
+    const sy = (ham.y / MAP_H) * h;
+    ctx.fillStyle = 'rgba(100,130,95,0.35)';
+    ctx.fillRect(sx, sy, 1, 1);
+  }
+
+  ctx.font = '11px system-ui,sans-serif';
+  ctx.fillStyle = 'rgba(200,190,170,0.35)';
+  ctx.fillText('Auredia', (2100 / MAP_W) * w, (4800 / MAP_H) * h);
+  ctx.fillText('Trivalen', (6000 / MAP_W) * w, (4800 / MAP_H) * h);
+  ctx.fillText('Uloren', (9000 / MAP_W) * w, (5000 / MAP_H) * h);
+}
 
 export default function TitleScreen() {
   const startGame = useGameStore(s => s.startGame);
@@ -9,65 +85,26 @@ export default function TitleScreen() {
   useEffect(() => {
     const c = canvasRef.current;
     if (!c) return;
-    const ctx = c.getContext('2d')!;
-    let animId: number;
-    const stars: { x: number; y: number; r: number; speed: number; o: number }[] = [];
-
-    function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
-      stars.length = 0;
-      for (let i = 0; i < 80; i++) {
-        stars.push({
-          x: Math.random() * c.width,
-          y: Math.random() * c.height,
-          r: Math.random() * 1.5 + 0.3,
-          speed: Math.random() * 0.3 + 0.05,
-          o: Math.random() * 0.6 + 0.1,
-        });
-      }
-    }
-
-    function draw() {
-      ctx.clearRect(0, 0, c.width, c.height);
-      ctx.strokeStyle = 'rgba(201,168,76,0.06)';
-      ctx.lineWidth = 0.5;
-      for (let i = 0; i < stars.length; i++) {
-        for (let j = i + 1; j < stars.length; j++) {
-          const dx = stars[i].x - stars[j].x;
-          const dy = stars[i].y - stars[j].y;
-          const d = Math.sqrt(dx * dx + dy * dy);
-          if (d < 100) {
-            ctx.globalAlpha = (1 - d / 100) * 0.2;
-            ctx.beginPath();
-            ctx.moveTo(stars[i].x, stars[i].y);
-            ctx.lineTo(stars[j].x, stars[j].y);
-            ctx.stroke();
-          }
-        }
-      }
-      ctx.globalAlpha = 1;
-      stars.forEach(s => {
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(201,168,76,${s.o})`;
-        ctx.fill();
-        s.y -= s.speed;
-        if (s.y < -2) { s.y = c.height + 2; s.x = Math.random() * c.width; }
-      });
-      animId = requestAnimationFrame(draw);
-    }
-
-    resize();
-    draw();
-    window.addEventListener('resize', resize);
-    return () => { cancelAnimationFrame(animId); window.removeEventListener('resize', resize); };
+    const paint = () => {
+      const w = c.offsetWidth;
+      const h = c.offsetHeight;
+      if (w < 2 || h < 2) return;
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext('2d');
+      if (!ctx) return;
+      drawWorldPreview(ctx, w, h);
+    };
+    paint();
+    window.addEventListener('resize', paint);
+    return () => window.removeEventListener('resize', paint);
   }, []);
 
   return (
     <div className="relative min-h-screen flex flex-col items-center justify-center text-center overflow-hidden bg-ink">
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full opacity-30" />
-      
+      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full opacity-50" />
+      <div className="absolute inset-0 bg-gradient-to-b from-ink/40 via-transparent to-ink/90 pointer-events-none" />
+
       <motion.div
         className="relative z-10 flex flex-col items-center gap-6 px-8"
         initial={{ opacity: 0 }}
@@ -80,67 +117,38 @@ export default function TitleScreen() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
-          An Emergent Narrative RPG
+          A Living World Awaits
         </motion.p>
-
         <motion.h1
-          className="font-display text-[clamp(64px,14vw,160px)] font-black leading-[0.9] text-parchment gold-glow"
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5, duration: 1 }}
+          className="font-display text-5xl md:text-7xl text-parchment gold-glow"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.5, type: 'spring', stiffness: 80 }}
         >
           Chronicle
+          <br />
+          <span className="text-gold">of Aethermoor</span>
         </motion.h1>
-
         <motion.p
-          className="font-body text-[clamp(16px,2.5vw,20px)] italic text-mist max-w-[500px]"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.8 }}
-        >
-          An open-world RPG where the world doesn't care about you. Not yet.
-        </motion.p>
-
-        <motion.div
-          className="w-[120px] h-px bg-gradient-to-r from-transparent via-gold to-transparent my-4"
+          className="font-body text-mist/70 max-w-md text-sm leading-relaxed"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 1.1 }}
-        />
-
-        <motion.p
-          className="font-display text-[11px] tracking-[0.2em] text-gold uppercase"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.3 }}
+          transition={{ delay: 0.9 }}
         >
-          No Classes · Living World · AI Memory · Emergent Narrative
+          Ten thousand tiles of kingdoms, trade roads, and forgotten ruins — ticking forward whether you move or not.
         </motion.p>
-
         <motion.button
-          onClick={startGame}
-          className="mt-8 px-10 py-4 border border-gold-dark bg-gold/5 font-display text-sm tracking-[0.2em] text-gold uppercase
-            hover:bg-gold/15 hover:border-gold transition-all duration-300 cursor-pointer"
-          initial={{ opacity: 0, y: 20 }}
+          type="button"
+          onClick={() => startGame()}
+          className="mt-4 px-10 py-3 border-2 border-gold/40 bg-gold/5 font-display text-sm tracking-widest text-gold uppercase hover:bg-gold/15 hover:border-gold/60 transition-all cursor-pointer"
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1.6 }}
+          transition={{ delay: 1.2 }}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
         >
-          Begin Your Chronicle
+          Enter the World
         </motion.button>
-      </motion.div>
-
-      <motion.div
-        className="absolute bottom-10 flex flex-col items-center gap-2 opacity-50"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 0.5 }}
-        transition={{ delay: 2 }}
-      >
-        <span className="font-mono text-[10px] tracking-[0.3em] text-mist uppercase">
-          Your story awaits
-        </span>
-        <div className="w-px h-10 bg-gradient-to-b from-gold to-transparent animate-pulse-gold" />
       </motion.div>
     </div>
   );

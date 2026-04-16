@@ -112,7 +112,7 @@ export const INITIAL_NPCS: Npc[] = [
   { id: 'astronomer_vael', name: 'Astronomer Vael', title: 'Star-Reader of Coldpeak', location: 'coldpeak', faction: 'scholar', personality: 'Mystical, distant, speaks in metaphors that turn out to be literal.', memories: [], disposition: 0 },
 ];
 
-export function generateEvents(locationId: string, season: Season, tick: number): GameEvent[] {
+export function generateEvents(locationId: string, season: Season, tick: number, completedEvents: string[] = []): GameEvent[] {
   const events: GameEvent[] = [];
   const loc = LOCATIONS.find(l => l.id === locationId);
   if (!loc) return events;
@@ -120,7 +120,7 @@ export function generateEvents(locationId: string, season: Season, tick: number)
   const locationEvents: Record<string, GameEvent[]> = {
     ashenford: [
       {
-        id: `ashenford_bandits_${tick}`, title: 'Bandit Threat', location: 'ashenford',
+        id: 'ashenford_bandits', title: 'Bandit Threat', location: 'ashenford',
         narrative: 'Mira meets you at the village edge, worry carved into her face. "Bandits. On the north road. They hit a grain shipment yesterday."',
         choices: [
           { id: 'hunt_bandits', text: '⚔️ Hunt the bandits down', repEffects: { conquest: 8, exploration: 3 }, factionEffects: { green: 10, iron: 5 }, npcEffects: [{ npcId: 'mira', disposition: 20, memory: 'Defended Ashenford from bandits' }], resultText: 'You track the bandits and scatter them. Ashenford breathes easier tonight.', chronicleText: 'The traveler cleared the bandit camp threatening Ashenford.' },
@@ -130,7 +130,7 @@ export function generateEvents(locationId: string, season: Season, tick: number)
         ],
       },
       {
-        id: `ashenford_harvest_${tick}`, title: 'Harvest Time', location: 'ashenford',
+        id: 'ashenford_harvest', title: 'Harvest Time', location: 'ashenford',
         narrative: 'The fields glow gold with ripe wheat. Aldric wipes sweat. "We need hands. The harvest won\'t wait."',
         choices: [
           { id: 'help_harvest', text: '🌾 Roll up your sleeves', repEffects: { craft: 10, diplomacy: 3 }, factionEffects: { green: 8 }, npcEffects: [{ npcId: 'aldric', disposition: 15, memory: 'Helped with the harvest' }, { npcId: 'mira', disposition: 10, memory: 'Worked the fields alongside us' }], resultText: 'Three days of labor. Your hands blister, then harden. The villagers begin to know you.', chronicleText: 'The traveler labored in Ashenford\'s fields during the harvest.' },
@@ -140,7 +140,7 @@ export function generateEvents(locationId: string, season: Season, tick: number)
     ],
     saltmoor: [
       {
-        id: `saltmoor_guild_${tick}`, title: 'The Guild\'s Proposal', location: 'saltmoor',
+        id: 'saltmoor_guild', title: 'The Guild\'s Proposal', location: 'saltmoor',
         narrative: 'Guildmaster Renn studies you over steepled fingers. "The Guild is offering you a choice."',
         choices: [
           { id: 'join_guild', text: '⚖️ Accept Guild membership', repEffects: { trade: 12, diplomacy: 5 }, factionEffects: { amber: 15, iron: -5 }, npcEffects: [{ npcId: 'guildmaster_renn', disposition: 20, memory: 'Joined the Trade Guild' }], resultText: '"Welcome to the Amber Compact\'s greatest asset."', chronicleText: 'The traveler joined the Saltmoor Trade Guild.' },
@@ -151,7 +151,7 @@ export function generateEvents(locationId: string, season: Season, tick: number)
     ],
     ironhold: [
       {
-        id: `ironhold_trial_${tick}`, title: 'The Iron Trial', location: 'ironhold',
+        id: 'ironhold_trial', title: 'The Iron Trial', location: 'ironhold',
         narrative: 'Lord Vane regards you from an iron throne. "Everyone who enters Ironhold must prove their worth."',
         choices: [
           { id: 'accept_trial', text: '⚔️ Accept the combat trial', repEffects: { conquest: 12 }, factionEffects: { iron: 12 }, npcEffects: [{ npcId: 'lord_vane', disposition: 15, memory: 'Passed the Iron Trial' }, { npcId: 'sergeant_kael', disposition: 10, memory: 'Fought well' }], resultText: 'Three rounds in the iron ring. You bleed. They bleed more. "You may stay."', chronicleText: 'The traveler passed the Iron Trial in Ironhold.' },
@@ -162,7 +162,7 @@ export function generateEvents(locationId: string, season: Season, tick: number)
     ],
     thornwick: [
       {
-        id: `thornwick_spirits_${tick}`, title: 'The Old Songs', location: 'thornwick',
+        id: 'thornwick_spirits', title: 'The Old Songs', location: 'thornwick',
         narrative: 'Elder Saya sits by the standing stones. "The trees are restless. Something moves in the deep wood. Will you listen to the old song?"',
         choices: [
           { id: 'listen_song', text: '🔮 Listen to the old song', repEffects: { arcane: 10, exploration: 5 }, factionEffects: { green: 8, scholar: 5 }, npcEffects: [{ npcId: 'elder_saya', disposition: 20, memory: 'Listened to the old songs' }], resultText: 'The song is in a language you don\'t know. But you understand it.', chronicleText: 'The traveler listened to Elder Saya\'s old song. Something awakened.' },
@@ -172,7 +172,7 @@ export function generateEvents(locationId: string, season: Season, tick: number)
     ],
     graygate: [
       {
-        id: `graygate_intelligence_${tick}`, title: 'Whispers in Graygate', location: 'graygate',
+        id: 'graygate_intelligence', title: 'Whispers in Graygate', location: 'graygate',
         narrative: 'Lysara appears at your table. "I have information three factions would kill for. The price is a favor. Unnamed. Future."',
         choices: [
           { id: 'accept_deal', text: '🕸️ Accept the unnamed favor', repEffects: { diplomacy: 12, exploration: 5 }, npcEffects: [{ npcId: 'broker_lysara', disposition: 15, memory: 'Accepted my deal' }], resultText: 'Details of a secret Iron-Ashen alliance. "Remember. You owe me."', chronicleText: 'The traveler struck a deal with Lysara in Graygate.' },
@@ -183,7 +183,7 @@ export function generateEvents(locationId: string, season: Season, tick: number)
     ],
     dustfall: [
       {
-        id: `dustfall_ruins_${tick}`, title: 'Beneath the Stones', location: 'dustfall',
+        id: 'dustfall_ruins', title: 'Beneath the Stones', location: 'dustfall',
         narrative: 'Archivist Nol\'s hands shake. "We found a new chamber. The script — it\'s not Imperial. It\'s older. Much older."',
         choices: [
           { id: 'explore_chamber', text: '🔮 Descend into the chamber', repEffects: { arcane: 15, exploration: 8 }, factionEffects: { scholar: 12 }, npcEffects: [{ npcId: 'archivist_nol', disposition: 20, memory: 'Entered the deep chamber' }], resultText: 'A pedestal. A fragment that pulses with warm light. You touch it. A word you\'ll always remember.', chronicleText: 'The traveler descended into the ancient chamber beneath Dustfall.' },
@@ -194,7 +194,7 @@ export function generateEvents(locationId: string, season: Season, tick: number)
     ],
     crossroads: [
       {
-        id: `crossroads_rumors_${tick}`, title: 'Tavern Talk', location: 'crossroads',
+        id: 'crossroads_rumors', title: 'Tavern Talk', location: 'crossroads',
         narrative: 'Bryn slides a mug across. "Three things today. Iron Compact mobilizing. Amber raised tariffs. And something came from the Badlands."',
         choices: [
           { id: 'pursue_military', text: '⚔️ Ask about the mobilization', repEffects: { conquest: 5, exploration: 5 }, resultText: '"Watch the east road. Iron patrols have been stopping travelers."', chronicleText: 'The traveler learned of Iron Compact mobilization.' },
@@ -205,7 +205,7 @@ export function generateEvents(locationId: string, season: Season, tick: number)
     ],
     marshend: [
       {
-        id: `marshend_job_${tick}`, title: 'A Job Offer', location: 'marshend',
+        id: 'marshend_job', title: 'A Job Offer', location: 'marshend',
         narrative: 'Maren flips a coin. "A caravan needs to move through Iron territory without being searched."',
         choices: [
           { id: 'accept_smuggle', text: '🗡️ Take the smuggling job', repEffects: { trade: 5, conquest: 3 }, factionEffects: { ashen: 12, iron: -8 }, npcEffects: [{ npcId: 'shadow_maren', disposition: 20, memory: 'Took the job — reliable' }], resultText: 'Tense run. Two close calls. Maren pays double. "Consider it a recruitment bonus."', chronicleText: 'The traveler smuggled goods for the Ashen Brotherhood.' },
@@ -215,7 +215,7 @@ export function generateEvents(locationId: string, season: Season, tick: number)
     ],
     badlands: [
       {
-        id: `badlands_encounter_${tick}`, title: 'Something in the Dust', location: 'badlands',
+        id: 'badlands_encounter', title: 'Something in the Dust', location: 'badlands',
         narrative: 'A sound. Not wind. Not animal. A word. The ground vibrates.',
         choices: [
           { id: 'approach_source', text: '🔮 Follow the sound', repEffects: { arcane: 15, exploration: 10 }, resultText: 'A crack in the earth. Crystals that look like text. A name. Not yours. Older.', chronicleText: 'The traveler found the speaking crystals in the Badlands.' },
@@ -225,7 +225,7 @@ export function generateEvents(locationId: string, season: Season, tick: number)
     ],
     coldpeak: [
       {
-        id: `coldpeak_stars_${tick}`, title: 'The Stars Speak', location: 'coldpeak',
+        id: 'coldpeak_stars', title: 'The Stars Speak', location: 'coldpeak',
         narrative: 'Astronomer Vael trembles. "The constellation of the Shepherd has shifted. That hasn\'t happened since the Vanishing."',
         choices: [
           { id: 'carry_message', text: '📜 Carry the message to Dustfall', repEffects: { diplomacy: 8, exploration: 5, arcane: 3 }, factionEffects: { scholar: 10, iron: -3 }, npcEffects: [{ npcId: 'astronomer_vael', disposition: 20, memory: 'Carried the star-message' }], resultText: '"Tell them the Shepherd has moved. They will know what it means."', chronicleText: 'The traveler carried a celestial warning from Coldpeak.' },
@@ -235,7 +235,7 @@ export function generateEvents(locationId: string, season: Season, tick: number)
     ],
     ruins_of_aether: [
       {
-        id: `ruins_temple_${tick}`, title: 'The Temple Speaks', location: 'ruins_of_aether',
+        id: 'ruins_temple', title: 'The Temple Speaks', location: 'ruins_of_aether',
         narrative: 'Impossible silence. The walls are covered in script you now recognize fragments of.',
         choices: [
           { id: 'attempt_reading', text: '🔮 Read the temple walls', repEffects: { arcane: 20 }, requiresRep: { arcane: 20 }, resultText: 'You speak the first sentence of the old language. The temple responds. A new Speaker has emerged.', chronicleText: 'The traveler spoke the old language in the Aetherik Temple.' },
@@ -246,9 +246,10 @@ export function generateEvents(locationId: string, season: Season, tick: number)
     ],
   };
 
-  const locEvents = locationEvents[locationId] || [];
+  const locEvents = (locationEvents[locationId] || []).filter(e => !completedEvents.includes(e.id));
   if (season === 'harvest' && locationId === 'ashenford') {
-    return [locEvents.find(e => e.id.includes('harvest')) || locEvents[0]].filter(Boolean) as GameEvent[];
+    const harvest = locEvents.find(e => e.id === 'ashenford_harvest');
+    return harvest ? [harvest] : [];
   }
   if (locEvents.length > 0) {
     const idx = Math.floor(Math.random() * locEvents.length);

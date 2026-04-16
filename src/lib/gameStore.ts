@@ -2,10 +2,11 @@ import { create } from 'zustand';
 import { GameState, Season, ChronicleEntry, Reputation, FactionStanding, OverlayType, TutorialStep, HotbarItem, DayNightPhase, MountState } from './gameTypes';
 import { createWeatherState } from './weatherSystem';
 import { startTicker } from './worldTicker';
-import { INITIAL_NPCS, generateEvents, getWorldEvent, getPlayerTitle, ENVIRONMENT_ACTIONS, FOOD_VALUES } from './gameData';
-import { LOCATION_COORDS, isWalkableCode, getTileAt, MAP_W, MAP_H, TILE_NAMES, getContinentAt } from './mapGenerator';
+import { INITIAL_NPCS, generateEvents, getWorldEvent, getPlayerTitle, ENVIRONMENT_ACTIONS, FOOD_VALUES, LOCATIONS } from './gameData';
+import { LOCATION_COORDS, isWalkableCode, getTileAt, MAP_W, MAP_H, TILE_NAMES, getContinentAt, getSettlementMeta } from './mapGenerator';
+import { getExtendedLocationCoords, isHamletId } from './hamlets';
 import { initWorldEntities, getEntitiesNear, spawnEntity, removeEntity } from './worldEntities';
-import { createInventory, addToInventory, removeFromInventory, equipItem, unequipItem, craft, canCraft, Inventory, getWeaponDamage, getTotalArmor } from './craftingSystem';
+import { createInventory, addToInventory, removeFromInventory, equipItem, unequipItem, craft, canCraft, Inventory, getWeaponDamage, getTotalArmor, countItem } from './craftingSystem';
 import { createSkillTree, addXp, selectPerk, SkillTree } from './skills';
 import { ITEMS } from './items';
 import { RECIPES } from './recipes';
@@ -16,20 +17,53 @@ import { createBountyBoard, BountyBoard } from './bountyBoard';
 import { createFogMap, revealAroundPlayer, revealLocation, FogMap } from './fogOfWar';
 import { createHousing, purchasePlot, placeFurniture, Housing, PLOT_PRICES } from './housing';
 import { playerAttack } from './combatSystem';
-import { DialogueTree } from './dialogue';
+import { DialogueTree, getDialogueTree, genericDialogue } from './dialogue';
+import { generateNpcDialogue, isGeminiConfigured } from './geminiNpc';
 
 const SEASON_ORDER: Season[] = ['thaw', 'summer', 'harvest', 'dark'];
 const TICKS_PER_SEASON = 12;
-const PROXIMITY_RADIUS = 30;
+
+function proximityForLocation(id: string): number {
+  if (isHamletId(id)) return 15;
+  const m = getSettlementMeta(id);
+  if (!m) return 28;
+  switch (m.type) {
+    case 'capital': return 48;
+    case 'city': return 40;
+    case 'fortress': return 42;
+    case 'port': return 38;
+    case 'town': return 34;
+    case 'wilderness': return 34;
+    default: return 28;
+  }
+}
 
 function findNearestLocation(px: number, py: number): string | null {
+  const coords = getExtendedLocationCoords();
   let nearest: string | null = null;
   let minDist = Infinity;
-  for (const [id, coord] of Object.entries(LOCATION_COORDS)) {
+  for (const [id, coord] of Object.entries(coords)) {
+    const pr = proximityForLocation(id);
     const d = Math.sqrt((px - coord.x) ** 2 + (py - coord.y) ** 2);
-    if (d < PROXIMITY_RADIUS && d < minDist) { minDist = d; nearest = id; }
+    if (d < pr && d < minDist) {
+      minDist = d;
+      nearest = id;
+    }
   }
   return nearest;
+}
+
+function runtimeDialogueFromGemini(npcKey: string, speaker: string, npcText: string, optionTexts: string[]): DialogueTree {
+  const options = optionTexts.map((t, i) => ({
+    id: `g_${i}`,
+    text: t,
+    exitText: 'You step away.',
+  }));
+  return {
+    npcId: npcKey,
+    startNodeId: 'g0',
+    nodes: { g0: { id: 'g0', speaker, text: npcText, options } },
+  };
 }
 
 function inventoryToHotbar(inv: Inventory): HotbarItem[] {
@@ -48,10 +82,10 @@ function inventoryToHotbar(inv: Inventory): HotbarItem[] {
 
 function makeStarterInventory(): Inventory {
   let inv = createInventory();
-  inv = addToInventory(inv, 'rusty_knife', 1);
-  inv = addToInventory(inv, 'flint_steel', 1);
   inv = addToInventory(inv, 'waterskin', 1);
-  inv = addToInventory(inv, 'trail_ration', 3);
+  inv = addToInventory(inv, 'bare_hands', 1);
+  const bh = inv.slots.findIndex(s => s?.itemId === 'bare_hands');
+  if (bh >= 0) inv = equipItem(inv, bh);
   return inv;
 }
 
@@ -110,7 +144,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   inventory: starterInv,
   hotbar: inventoryToHotbar(starterInv),
   activeSlot: 0,
-  gold: 50,
+  gold: 10,
   skills: createSkillTree(),
   markets: {},
   reputation: { conquest: 0, trade: 0, craft: 0, diplomacy: 0, exploration: 0, arcane: 0 },
@@ -127,6 +161,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   activeCaveId: null,
   npcs: [],
   activeDialogue: null,
+  minorNpcState: {},
+  tutorialObjective: 0,
   chronicle: [],
   currentEvent: null,
   lastResult: null,
@@ -155,7 +191,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       health: 100, maxHealth: 100, hunger: 100,
       tick: 0, worldTime: 14 * 2, dayNightPhase: 'day',
       weather: createWeatherState(), season: 'thaw', seasonTick: 0, seed: 42,
-      inventory: inv, hotbar: inventoryToHotbar(inv), activeSlot: 0, gold: 50,
+      inventory: inv, hotbar: inventoryToHotbar(inv), activeSlot: 0, gold: 10,
       skills: createSkillTree(),
       markets: createMarkets(),
       reputation: { conquest: 0, trade: 0, craft: 0, diplomacy: 0, exploration: 0, arcane: 0 },
@@ -165,7 +201,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentLocation: 'ashenford', nearestLocation: 'ashenford',
       playerX: LOCATION_COORDS.ashenford.x, playerY: LOCATION_COORDS.ashenford.y,
       facingDir: { dx: 0, dy: 1 }, mounted: 'none', activeCaveId: null,
-      npcs, activeDialogue: null,
+      npcs, activeDialogue: null, minorNpcState: {}, tutorialObjective: 0,
       chronicle: [initialChronicle], currentEvent: null, lastResult: null,
       visitedLocations: ['ashenford'], completedEvents: [],
       playerTitle: 'Unknown Traveler',
@@ -229,7 +265,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let newSeason = state.season;
 
     if (nearest && nearest !== state.nearestLocation) {
-      currentLoc = nearest;
+      // Hamlets update proximity label but not "current settlement" (markets keyed by major locations)
+      currentLoc = isHamletId(nearest) ? state.currentLocation : nearest;
       newTick++;
       newSeasonTick++;
       if (newSeasonTick >= TICKS_PER_SEASON) {
@@ -244,7 +281,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         newVisited = [...state.visitedLocations, nearest];
         newChronicle.push({ tick: newTick, season: newSeason, text: `The traveler arrived in ${nearest.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} for the first time.`, type: 'discovery' });
       }
-      const events = generateEvents(nearest, newSeason, newTick);
+      const events = generateEvents(nearest, newSeason, newTick, state.completedEvents);
       if (events.length > 0) newEvent = events[0];
     }
 
@@ -262,22 +299,41 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Update fog
     const newFog = revealAroundPlayer(state.fog, nx, ny, 120);
 
+    let tutorialObjective = state.tutorialObjective;
+    const newChronicleForMove = [...newChronicle];
+    if (
+      tutorialObjective === 4 &&
+      nearest &&
+      nearest !== 'ashenford' &&
+      !isHamletId(nearest) &&
+      LOCATIONS.some(l => l.id === nearest)
+    ) {
+      tutorialObjective = 5;
+      newChronicleForMove.push({
+        tick: newTick,
+        season: newSeason,
+        text: 'The first journey beyond home soil — the wide world opens.',
+        type: 'discovery',
+      });
+    }
+
     set({
       playerX: nx, playerY: ny, facingDir: newFacing,
       nearestLocation: nearest, currentLocation: currentLoc,
       tick: newTick, season: newSeason, seasonTick: newSeasonTick,
       visitedLocations: newVisited,
-      chronicle: [...state.chronicle, ...newChronicle],
+      chronicle: [...state.chronicle, ...newChronicleForMove],
       currentEvent: newEvent,
       hunger: newHunger, health: newHealth, phase: newPhase,
       fog: newFog,
       playerTitle: getPlayerTitle(state.reputation as unknown as Record<string, number>),
+      tutorialObjective,
     });
   },
 
   travel: (locationId: string) => {
     const state = get();
-    const coord = LOCATION_COORDS[locationId];
+    const coord = getExtendedLocationCoords()[locationId];
     if (!coord) return;
     const newTick = state.tick + 1;
     const newSeasonTick = state.seasonTick + 1;
@@ -286,7 +342,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const idx = SEASON_ORDER.indexOf(state.season);
       newSeason = SEASON_ORDER[(idx + 1) % 4];
     }
-    const events = generateEvents(locationId, newSeason, newTick);
+    const events = generateEvents(locationId, newSeason, newTick, state.completedEvents);
     const worldEvent = getWorldEvent(newTick, newSeason);
     const newChronicle: ChronicleEntry[] = [];
     if (worldEvent) newChronicle.push({ tick: newTick, season: newSeason, text: worldEvent, type: 'world' });
@@ -301,6 +357,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
     else if (travelHunger < 20) travelHealth = Math.max(0, travelHealth - 0.5);
     if (travelHealth <= 0) travelPhase = 'dead';
     const newFog = revealAroundPlayer(revealLocation(state.fog, coord.x, coord.y), coord.x, coord.y, 120);
+    let travelTut = state.tutorialObjective;
+    const chronTravel = [...newChronicle];
+    if (
+      travelTut === 4 &&
+      locationId !== 'ashenford' &&
+      !isHamletId(locationId) &&
+      LOCATIONS.some(l => l.id === locationId)
+    ) {
+      travelTut = 5;
+      chronTravel.push({
+        tick: newTick,
+        season: newSeason,
+        text: 'The first journey beyond home soil — the wide world opens.',
+        type: 'discovery',
+      });
+    }
     set({
       currentLocation: locationId, nearestLocation: locationId,
       playerX: coord.x, playerY: coord.y,
@@ -308,10 +380,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       seasonTick: newSeasonTick >= TICKS_PER_SEASON ? 0 : newSeasonTick,
       currentEvent: events.length > 0 ? events[0] : null, lastResult: null,
       visitedLocations: visited ? state.visitedLocations : [...state.visitedLocations, locationId],
-      chronicle: [...state.chronicle, ...newChronicle],
+      chronicle: [...state.chronicle, ...chronTravel],
       hunger: travelHunger, health: travelHealth, phase: travelPhase,
       fog: newFog, mounted: 'none',
       playerTitle: getPlayerTitle(state.reputation as unknown as Record<string, number>),
+      tutorialObjective: travelTut,
     });
   },
 
@@ -372,6 +445,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (action.itemReward) newInv = addToInventory(newInv, action.itemReward.id, action.itemReward.quantity);
     const newSkills = addXp(state.skills, 'crafting', 5);
     const entry: ChronicleEntry = { tick: state.tick, season: state.season, text: action.chronicleText, type: 'environment' };
+    let tut = state.tutorialObjective;
+    if (tut === 0 && countItem(newInv, 'wood') >= 3) tut = 1;
     set({
       reputation: newRep, inventory: newInv, hotbar: inventoryToHotbar(newInv),
       skills: newSkills,
@@ -379,6 +454,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       chronicle: [...state.chronicle, entry],
       environmentCooldowns: { ...state.environmentCooldowns, [actionId]: state.tick + action.cooldownTicks },
       playerTitle: getPlayerTitle(newRep as unknown as Record<string, number>),
+      tutorialObjective: tut,
     });
   },
 
@@ -433,6 +509,69 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return true;
     }
 
+    // Talk to settlement or hamlet NPC
+    const talkNpc = nearby.find(e => e.kind === 'settlement_npc' || e.kind === 'hamlet_npc');
+    if (talkNpc) {
+      const data = talkNpc.data as Record<string, unknown>;
+      const npcId = data.npcId as string | undefined;
+      const minorKey = (data.minorKey as string) ?? npcId ?? talkNpc.id;
+      const name = (data.name as string) ?? 'Stranger';
+      const job = (data.job as string) ?? 'commoner';
+      const hamletName = (data.hamletName as string) ?? 'the road';
+      const continent = getContinentAt(state.playerX, state.playerY) ?? 'auredia';
+      const wx = Object.values(state.weather)[0];
+      const weatherStr = wx?.state ?? 'clear';
+      let tree: DialogueTree | undefined;
+      if (npcId) tree = getDialogueTree(npcId);
+      if (!tree) tree = genericDialogue(minorKey, name, job);
+
+      const prevMinor = state.minorNpcState[minorKey] ?? { memories: [], disposition: 0, lastSeenTick: 0 };
+      const nextMinor = {
+        ...state.minorNpcState,
+        [minorKey]: {
+          memories: [...prevMinor.memories, `Spoke at tick ${state.tick}`].slice(-12),
+          disposition: prevMinor.disposition,
+          lastSeenTick: state.tick,
+        },
+      };
+      let newNpcs = state.npcs;
+      if (npcId) {
+        newNpcs = state.npcs.map(n =>
+          n.id === npcId
+            ? { ...n, memories: [...n.memories, { event: 'Conversation', tick: state.tick, sentiment: 'neutral' as const }].slice(-10) }
+            : n,
+        );
+      }
+
+      if (talkNpc.kind === 'hamlet_npc' && isGeminiConfigured()) {
+        void (async () => {
+          const st = get();
+          const minor = st.minorNpcState[minorKey] ?? { memories: [], disposition: 0, lastSeenTick: 0 };
+          const res = await generateNpcDialogue({
+            npcName: name,
+            npcJob: job,
+            npcPersonality: 'a local who has lived along this road for years',
+            location: hamletName,
+            continent,
+            season: st.season,
+            weather: weatherStr,
+            dayPhase: st.dayNightPhase,
+            playerReputation: st.reputation as unknown as Record<string, number>,
+            npcDisposition: minor.disposition,
+            npcMemories: minor.memories,
+            recentChronicle: st.chronicle.slice(-5).map(c => c.text),
+            worldEvents: [],
+          });
+          if (res) {
+            const opts = res.options.map(o => o.text);
+            set({ activeDialogue: runtimeDialogueFromGemini(minorKey, name, res.npcText, opts) });
+          }
+        })();
+      }
+      set({ minorNpcState: nextMinor, npcs: newNpcs, activeDialogue: tree });
+      return true;
+    }
+
     // Gather resources
     const resource = nearby.find(e => e.kind.startsWith('resource_'));
     if (resource) {
@@ -443,7 +582,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const newInv = addToInventory(state.inventory, itemId, qty);
       const newSkills = addXp(state.skills, 'crafting', 3);
       const entry: ChronicleEntry = { tick: state.tick, season: state.season, text: `Gathered ${ITEMS[itemId]?.name ?? itemId}.`, type: 'environment' };
-      set({ inventory: newInv, hotbar: inventoryToHotbar(newInv), skills: newSkills, chronicle: [...state.chronicle, entry] });
+      let tut = state.tutorialObjective;
+      if (tut === 0 && countItem(newInv, 'wood') >= 3) tut = 1;
+      set({ inventory: newInv, hotbar: inventoryToHotbar(newInv), skills: newSkills, chronicle: [...state.chronicle, entry], tutorialObjective: tut });
       return true;
     }
 
@@ -457,7 +598,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!result) return;
     const newSkills = addXp(state.skills, 'combat', result.xpGain);
     const newChronicle: ChronicleEntry[] = [];
-    if (result.killed) newChronicle.push({ tick: state.tick, season: state.season, text: `The traveler slew an enemy. (+${result.xpGain} combat XP)`, type: 'action' });
+    let inv = state.inventory;
+    let gold = state.gold;
+    if (result.killed && result.loot) {
+      for (const row of result.loot.items) {
+        inv = addToInventory(inv, row.itemId, row.qty);
+      }
+      gold += result.loot.gold;
+      const kindLabel = result.targetKind ?? 'foe';
+      newChronicle.push({
+        tick: state.tick,
+        season: state.season,
+        text: `The traveler felled a ${kindLabel}. (+${result.xpGain} combat XP)`,
+        type: 'action',
+      });
+    } else if (result.killed) {
+      newChronicle.push({ tick: state.tick, season: state.season, text: `The traveler slew an enemy. (+${result.xpGain} combat XP)`, type: 'action' });
+    }
 
     // Check if killed enemies advance any kill quests
     const newQuests = state.quests.map(q => {
@@ -467,7 +624,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return q;
     });
 
-    set({ skills: newSkills, quests: newQuests, chronicle: [...state.chronicle, ...newChronicle] });
+    let tut = state.tutorialObjective;
+    if (result.killed && ['deer', 'sheep', 'rabbit'].includes(String(result.targetKind)) && tut === 2) tut = 3;
+
+    set({
+      skills: newSkills,
+      quests: newQuests,
+      inventory: inv,
+      hotbar: inventoryToHotbar(inv),
+      gold,
+      chronicle: [...state.chronicle, ...newChronicle],
+      tutorialObjective: tut,
+    });
   },
 
   addItemToInventory: (itemId: string, qty: number) => {
@@ -501,7 +669,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const newInv = craft(state.inventory, recipe);
     const newSkills = addXp(state.skills, 'crafting', 10);
     const entry: ChronicleEntry = { tick: state.tick, season: state.season, text: `Crafted ${recipe.name}.`, type: 'action' };
-    set({ inventory: newInv, hotbar: inventoryToHotbar(newInv), skills: newSkills, chronicle: [...state.chronicle, entry] });
+    let tut = state.tutorialObjective;
+    if (recipe.id === 'craft_wooden_club' && tut === 1) tut = 2;
+    if (recipe.id === 'cook_meat' && tut === 3) tut = 4;
+    set({ inventory: newInv, hotbar: inventoryToHotbar(newInv), skills: newSkills, chronicle: [...state.chronicle, entry], tutorialObjective: tut });
   },
 
   selectPerkAction: (perkId: string) => {
@@ -516,7 +687,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const mItem = market.items.find(i => i.itemId === itemId);
     if (!mItem || mItem.stock < qty) return;
     const scarcity = mItem.stock < 3 ? 2.0 : mItem.stock < 8 ? 1.3 : mItem.stock > 20 ? 0.7 : 1.0;
-    const price = Math.max(1, Math.round(mItem.basePrice * mItem.priceMultiplier * scarcity));
+    let price = Math.max(1, Math.round(mItem.basePrice * mItem.priceMultiplier * scarcity));
+    const locals = state.npcs.filter(n => n.location === state.currentLocation);
+    const bestDisp = locals.length ? Math.max(...locals.map(n => n.disposition)) : 0;
+    const discount = Math.min(0.12, Math.max(0, bestDisp) / 120);
+    price = Math.max(1, Math.round(price * (1 - discount)));
     const totalCost = price * qty;
     if (state.gold < totalCost) return;
     const newInv = addToInventory(state.inventory, itemId, qty);

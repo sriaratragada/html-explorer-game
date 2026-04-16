@@ -34,11 +34,11 @@ The world is already alive before the player takes their first step. Caravans mo
 
 ### Procedural World Generation
 
-The overworld is a **2000×2000 tile grid** generated at startup via layered noise functions. Biomes placed across the map include: grassland, forest, desert, snow, mountain, water, sand, and swamp. A road network is procedurally drawn to connect all 11 settlements, and the world is populated with decorative world objects and ambient map entities. For performance, the map is split into chunks and each chunk is pre-baked to an offscreen canvas — only dirty chunks are redrawn.
+The overworld is a **10,000×10,000** tile space across three continents (**Auredia**, **Trivalen**, **Uloren**). Terrain is built **lazily per 64×64 chunk** using layered noise (grassland, forest, dense forest, desert, snow, mountain, water, sand, swamp, ruins, roads, rivers, farm fields). Roads connect named settlements; **procedural hamlets** along roads add smaller sites with NPCs. Chunks are cached in `mapGenerator`; the canvas draws only visible area.
 
-### 11 Named Settlements
+### Named Settlements and Hamlets
 
-Eleven named locations are placed at fixed coordinates across the map: villages, towns, and fortresses each with distinct identities reflected in their events and NPCs. When the player enters within **30 tiles** of a new settlement, the game registers a discovery, advances the world tick/season, and may queue a location-specific narrative event.
+Many **authored locations** use tiered radii (large capitals and cities, smaller villages and forts) with scaled layout density. **Hamlets** are deterministic road camps with varied archetypes. Discovery uses proximity radii per tier; narrative events use **stable IDs** and `completedEvents` so stories do not re-fire when you walk away and return.
 
 ### Branching Narrative Events
 
@@ -69,7 +69,7 @@ The player has **health** and **hunger** bars rendered in the HUD. Hunger decays
 
 ### Six-Slot Hotbar
 
-A persistent hotbar sits at the bottom of the screen with six item slots. The player selects the active slot with number keys and uses the item with a keybind. New games begin with a small set of starter items. Currently, food is the primary item type — eating restores hunger.
+A persistent hotbar mirrors the first six **inventory** slots. New runs start **barehanded** with a waterskin; a short **on-screen tutorial** guides gathering wood, crafting a club, hunting, cooking, and visiting a major settlement. Food, potions, and gear behave according to `items.ts` / crafting recipes.
 
 ### Environment Actions
 
@@ -93,11 +93,11 @@ Every significant event — location discoveries, narrative choices and their ou
 
 ### Title Screen
 
-A styled title screen greets the player on load. Starting a new game initialises the world (map generation, NPC setup, starter hotbar) and transitions into the game shell. Tutorial state is tracked in the store to support future onboarding flows.
+The title view shows a **low-resolution preview** of the full 10k map (continents, roads, settlements, hamlets) behind the menu. Starting a new game runs `initWorldEntities` (boats, caves, resources, wildlife, settlement and hamlet NPCs), applies starter inventory, and enters the live game shell.
 
 ### Canvas Rendering
 
-`WorldMap.tsx` renders everything to a single HTML5 canvas: tile layers, road network, world objects, ambient entities, and the player token. The view pans to follow the player and supports zoom. Chunk baking means only changed regions are redrawn on each frame, keeping render cost proportional to what actually changed rather than the full 2000×2000 grid.
+`WorldMap.tsx` renders tiles, roads, objects, ambient decor, **world entities** (combat, gathering, mounts, caves), and the player. The view pans and zooms; chunks load on demand from `mapGenerator.getChunkData`.
 
 ---
 
@@ -129,7 +129,8 @@ src/
 │   ├── gameStore.ts       # Zustand store: all game state, rules, movement, tick logic
 │   ├── gameTypes.ts       # TypeScript interfaces for every game entity
 │   ├── gameData.ts        # Locations, NPCs, scripted events, environment actions
-│   ├── mapGenerator.ts    # Procedural terrain, road network, world objects
+│   ├── mapGenerator.ts    # Lazy chunks, continents, settlements, roads, objects
+│   ├── hamlets.ts         # Road hamlets + getExtendedLocationCoords
 │   └── utils.ts           # Shared helpers
 ├── components/
 │   └── game/
@@ -219,7 +220,9 @@ src/
 - Map markers — let the player pin notes on the world map
 - Tutorial / onboarding sequence for new players
 - Sound effects and ambient music tied to locations and seasons
-- Minimap or fog-of-war exploration reveal
+- Minimap or fog-of-war exploration reveal *(minimap + fog implemented; further polish welcome)*
+- Deeper hamlet economies tied to regional markets
+- Expand Gemini prompts and cache policy for NPC voice consistency
 - Accessibility: screen-reader hints and keyboard-only navigation
 - Undo last action / regret mechanic for critical story choices
 - Localization / i18n framework for multi-language support

@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react';
 import { useGameStore } from '@/lib/gameStore';
 import { MAP_W, MAP_H, LOCATION_COORDS, getContinentAt } from '@/lib/mapGenerator';
+import { getHamlets } from '@/lib/hamlets';
 import { LOCATIONS } from '@/lib/gameData';
 import { getEntitiesNear } from '@/lib/worldEntities';
 
@@ -87,12 +88,22 @@ export default function Minimap() {
       }
     }
 
-    // Nearby entity dots (enemies in red, animals in green, boats in blue)
+    // Hamlets (nearby road camps)
+    for (const h of getHamlets()) {
+      if (Math.hypot(h.x - playerX, h.y - playerY) > 720) continue;
+      const hx = (h.x / MAP_W) * MM_SIZE;
+      const hy = (h.y / MAP_H) * MM_SIZE;
+      ctx.fillStyle = 'rgba(130,160,120,0.45)';
+      ctx.fillRect(hx - 0.5, hy - 0.5, 1.2, 1.2);
+    }
+
+    // Nearby entity dots (enemies in red, animals in green, boats in blue, caves dark)
     const nearEnts = getEntitiesNear(playerX, playerY, 500);
     for (const ent of nearEnts) {
       const esx = (ent.x / MAP_W) * MM_SIZE;
       const esy = (ent.y / MAP_H) * MM_SIZE;
       if (['wolf', 'bandit', 'warband', 'bear'].includes(ent.kind)) ctx.fillStyle = 'rgba(200,50,50,0.6)';
+      else if (ent.kind === 'cave_entrance') ctx.fillStyle = 'rgba(28,28,44,0.92)';
       else if (['boat'].includes(ent.kind)) ctx.fillStyle = 'rgba(80,130,200,0.6)';
       else if (['horse'].includes(ent.kind)) ctx.fillStyle = 'rgba(180,140,60,0.6)';
       else if (['caravan'].includes(ent.kind)) ctx.fillStyle = 'rgba(200,180,80,0.6)';

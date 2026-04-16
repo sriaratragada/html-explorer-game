@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/lib/gameStore';
 import { SEASON_NAMES, SEASON_ICONS, REP_LABELS, LOCATIONS, ENVIRONMENT_ACTIONS } from '@/lib/gameData';
 import { TileType, TILE_NAMES, getTileAt, getContinentAt } from '@/lib/mapGenerator';
+import { getHamlets, isHamletId } from '@/lib/hamlets';
 import { getWeatherIcon } from '@/lib/weatherSystem';
 import { getTimeString } from '@/lib/timeSystem';
 import { getTotalArmor, getWeaponDamage } from '@/lib/craftingSystem';
@@ -38,7 +39,13 @@ export default function HudBar() {
   const mounted = useGameStore(s => s.mounted);
   const inventory = useGameStore(s => s.inventory);
 
+  const hamletNear = nearestLocation && isHamletId(nearestLocation) ? getHamlets().find(h => h.id === nearestLocation) : null;
   const locData = nearestLocation ? LOCATIONS.find(l => l.id === nearestLocation) : null;
+  const locationDisplay = hamletNear
+    ? { name: hamletNear.displayName, icon: '🛖' }
+    : locData
+      ? { name: locData.name, icon: locData.icon }
+      : null;
   const continent = getContinentAt(playerX, playerY);
   const continentWeather = continent ? weather[continent] : null;
   const weaponDmg = getWeaponDamage(inventory);
@@ -163,10 +170,10 @@ export default function HudBar() {
                 )}
               </AnimatePresence>
             </div>
-            {locData && (
+            {locationDisplay && (
               <div className="flex items-center gap-1.5 border-l border-gold/10 pl-3">
-                <span className="text-sm">{locData.icon}</span>
-                <span className="font-display text-xs text-parchment">{locData.name}</span>
+                <span className="text-sm">{locationDisplay.icon}</span>
+                <span className="font-display text-xs text-parchment">{locationDisplay.name}</span>
               </div>
             )}
             {continent && <span className="font-mono-game text-[9px] text-mist/40 border-l border-gold/10 pl-3">{CONTINENT_NAMES[continent] ?? continent}</span>}
