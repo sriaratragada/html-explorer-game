@@ -3,7 +3,7 @@ import { CHUNK_SIZE, MAP_W, MAP_H, LOCATION_COORDS, getSettlementMeta } from './
 export type EntityKind =
   | 'boat' | 'cave_entrance' | 'resource_tree' | 'resource_rock' | 'resource_iron'
   | 'resource_herb' | 'resource_berry' | 'wolf' | 'bandit' | 'warband'
-  | 'deer' | 'bear' | 'caravan' | 'army';
+  | 'deer' | 'bear' | 'caravan' | 'army' | 'horse' | 'sheep' | 'rabbit';
 
 export interface WorldEntity {
   id: string;
@@ -108,18 +108,50 @@ export function initWorldEntities() {
     }
   }
 
-  // Cave entrances in mountain/hill biomes (deterministic placement)
+  // Horses at stables near major settlements
+  for (const locId of ['highmarch', 'graygate', 'korrath_citadel', 'sarnak_hold', 'brightwater', 'vell_harbor']) {
+    const coord = LOCATION_COORDS[locId];
+    if (coord) {
+      spawnEntity('horse', coord.x + 15, coord.y + 5, { stable: locId });
+      spawnEntity('horse', coord.x + 18, coord.y + 7, { stable: locId });
+    }
+  }
+
   const hash = (a: number, b: number) => {
     let h = (a * 374761393 + b * 668265263 + 42) & 0xffffffff;
     h = ((h ^ (h >> 13)) * 1274126177) & 0xffffffff;
     return (h & 0x7fffffff) / 0x7fffffff;
   };
+
+  // Cave entrances
   for (let i = 0; i < 40; i++) {
     const x = Math.floor(hash(i * 137, 9999) * MAP_W);
     const y = Math.floor(hash(i * 251, 8888) * MAP_H);
     if (hash(x, y) < 0.5) {
       spawnEntity('cave_entrance', x, y, { explored: false, biome: 'mountain' });
     }
+  }
+
+  // Resource nodes scattered across the world
+  for (let i = 0; i < 200; i++) {
+    const x = Math.floor(hash(i * 173, 3333) * MAP_W);
+    const y = Math.floor(hash(i * 197, 4444) * MAP_H);
+    const roll = hash(x, y + 1000);
+    const kind: EntityKind = roll < 0.3 ? 'resource_tree' : roll < 0.5 ? 'resource_rock' : roll < 0.65 ? 'resource_herb' : roll < 0.8 ? 'resource_berry' : 'resource_iron';
+    spawnEntity(kind, x, y, {}, 1);
+  }
+
+  // Dynamic animals (replacing static AmbientEntity)
+  for (let i = 0; i < 150; i++) {
+    const x = Math.floor(hash(i * 211, 5555) * MAP_W);
+    const y = Math.floor(hash(i * 223, 6666) * MAP_H);
+    const roll = hash(x + 7777, y);
+    if (roll < 0.25) spawnEntity('deer', x, y, { behavior: 'grazing' }, 20);
+    else if (roll < 0.40) spawnEntity('sheep', x, y, { behavior: 'grazing' }, 15);
+    else if (roll < 0.50) spawnEntity('rabbit', x, y, { behavior: 'grazing' }, 8);
+    else if (roll < 0.65) spawnEntity('wolf', x, y, { behavior: 'hunting' }, 40);
+    else if (roll < 0.72) spawnEntity('bear', x, y, { behavior: 'patrol' }, 60);
+    else if (roll < 0.82) spawnEntity('bandit', x, y, { behavior: 'ambush' }, 50);
   }
 }
 

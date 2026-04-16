@@ -25,6 +25,9 @@ export default function OverlayPanel() {
       if (e.key === 'l' || e.key === 'L') setOverlay(overlay === 'skills' ? 'none' : 'skills');
       if (e.key === 'q' || e.key === 'Q') setOverlay(overlay === 'quests' ? 'none' : 'quests');
       if (e.key === 'f' || e.key === 'F') setOverlay(overlay === 'faction' ? 'none' : 'faction');
+      if (e.key === 'm' || e.key === 'M') setOverlay(overlay === 'shop' ? 'none' : 'shop');
+      if (e.key === 'b' || e.key === 'B') setOverlay(overlay === 'build' ? 'none' : 'build');
+      if (e.key === 't' || e.key === 'T') setOverlay(overlay === 'fasttravel' ? 'none' : 'fasttravel');
       if (e.key === 'F5') { e.preventDefault(); setOverlay(overlay === 'saveload' ? 'none' : 'saveload'); }
     };
     window.addEventListener('keydown', handler);

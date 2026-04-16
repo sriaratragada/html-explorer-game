@@ -7,6 +7,7 @@ import {
   WorldObject, AmbientEntity,
   WorldObjectType, AmbientEntityType,
 } from '@/lib/mapGenerator';
+import { getEntitiesInChunk, WorldEntity } from '@/lib/worldEntities';
 import { LOCATIONS } from '@/lib/gameData';
 import { Season } from '@/lib/gameTypes';
 
@@ -306,6 +307,7 @@ export default function WorldMap() {
   const movePlayer = useGameStore(s => s.movePlayer);
   const useItem = useGameStore(s => s.useItem);
   const interactEntity = useGameStore(s => s.interactEntity);
+  const attackAction = useGameStore(s => s.attackAction);
   const setOverlay = useGameStore(s => s.setOverlay);
   const overlay = useGameStore(s => s.overlay);
   const phase = useGameStore(s => s.phase);
@@ -357,16 +359,28 @@ export default function WorldMap() {
     return () => { clearInterval(iv); window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp); };
   }, [movePlayer]);
 
+  // E key — interact with entity first, then use item if no entity handled
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== 'e' && e.key !== 'E') return;
       if (['INPUT', 'TEXTAREA'].includes((document.activeElement as HTMLElement)?.tagName ?? '')) return;
-      interactEntity();
-      useItem();
+      const handled = interactEntity();
+      if (!handled) useItem();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [useItem, interactEntity]);
+
+  // J key — attack
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'j' && e.key !== 'J') return;
+      if (['INPUT', 'TEXTAREA'].includes((document.activeElement as HTMLElement)?.tagName ?? '')) return;
+      attackAction();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [attackAction]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -470,6 +484,61 @@ export default function WorldMap() {
           const sy = (animY - camY) * zoom;
           if (sx < -zoom * 4 || sx > canvasW + zoom * 4 || sy < -zoom * 4 || sy > canvasH + zoom * 4) continue;
           drawEntity(ctx, entity, sx, sy, zoom);
+        }
+      }
+
+      // ── World entities (boats, caves, enemies, resources, horses) ──
+      if (zoom >= 3) {
+        for (let ecy = chunkStartY; ecy <= chunkEndY; ecy++) {
+          for (let ecx = chunkStartX; ecx <= chunkEndX; ecx++) {
+            const worldEnts = getEntitiesInChunk(ecx, ecy);
+            for (const we of worldEnts) {
+              const esx = (we.x - camX) * zoom;
+              const esy = (we.y - camY) * zoom;
+              if (esx < -20 || esx > canvasW + 20 || esy < -20 || esy > canvasH + 20) continue;
+              const z = zoom;
+              ctx.save(); ctx.translate(esx, esy);
+              switch (we.kind) {
+                case 'boat':
+                  ctx.fillStyle = '#8a6a40'; ctx.fillRect(-z, -z * 0.5, z * 2, z); ctx.fillStyle = '#c8a060'; ctx.fillRect(-z * 0.1, -z * 1.5, z * 0.2, z * 1.2);
+                  break;
+                case 'horse':
+                  ctx.fillStyle = '#8a5a30'; ctx.fillRect(-z * 0.8, -z * 0.4, z * 1.6, z * 0.8); ctx.fillRect(-z * 1.0, -z * 0.8, z * 0.5, z * 0.5);
+                  break;
+                case 'cave_entrance':
+                  ctx.fillStyle = '#2a2a2a'; ctx.beginPath(); ctx.arc(0, 0, z * 1.2, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.arc(0, 0, z * 0.7, 0, Math.PI * 2); ctx.fill();
+                  break;
+                case 'wolf':
+                  ctx.fillStyle = '#606060'; ctx.fillRect(-z * 0.8, -z * 0.4, z * 1.6, z * 0.8);
+                  break;
+                case 'bandit': case 'warband':
+                  ctx.fillStyle = '#8a3030'; ctx.fillRect(-z * 0.35, -z * 0.9, z * 0.7, z * 0.9);
+                  ctx.beginPath(); ctx.arc(0, -z * 1.2, z * 0.35, 0, Math.PI * 2); ctx.fill();
+                  break;
+                case 'bear':
+                  ctx.fillStyle = '#5a3a1a'; ctx.fillRect(-z * 1, -z * 0.6, z * 2, z * 1.2);
+                  break;
+                case 'deer':
+                  ctx.fillStyle = '#a07850'; ctx.fillRect(-z * 0.7, -z * 0.4, z * 1.4, z * 0.7);
+                  break;
+                case 'sheep':
+                  ctx.fillStyle = '#e8e4d8'; ctx.beginPath(); ctx.ellipse(0, 0, z * 0.8, z * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+                  break;
+                case 'rabbit':
+                  ctx.fillStyle = '#d0c8b0'; ctx.beginPath(); ctx.ellipse(0, 0, z * 0.4, z * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+                  break;
+                default:
+                  if (we.kind.startsWith('resource_')) {
+                    ctx.fillStyle = we.kind === 'resource_tree' ? '#3a6a2a' : we.kind === 'resource_rock' ? '#7a7a7a' : we.kind === 'resource_iron' ? '#8a6644' : '#4a8a3a';
+                    ctx.beginPath(); ctx.arc(0, 0, z * 0.6, 0, Math.PI * 2); ctx.fill();
+                  } else {
+                    ctx.fillStyle = '#aaa'; ctx.beginPath(); ctx.arc(0, 0, z * 0.5, 0, Math.PI * 2); ctx.fill();
+                  }
+              }
+              ctx.restore();
+            }
+          }
         }
       }
 

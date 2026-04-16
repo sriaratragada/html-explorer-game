@@ -2,7 +2,14 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/lib/gameStore';
 import { SEASON_NAMES, SEASON_ICONS, REP_LABELS, LOCATIONS, ENVIRONMENT_ACTIONS } from '@/lib/gameData';
-import { TileType, TILE_NAMES, getTileAt } from '@/lib/mapGenerator';
+import { TileType, TILE_NAMES, getTileAt, getContinentAt } from '@/lib/mapGenerator';
+import { getWeatherIcon } from '@/lib/weatherSystem';
+import { getTimeString } from '@/lib/timeSystem';
+import { getTotalArmor, getWeaponDamage } from '@/lib/craftingSystem';
+import { ITEMS } from '@/lib/items';
+
+const DAY_ICONS: Record<string, string> = { dawn: '🌅', day: '☀️', dusk: '🌇', night: '🌙' };
+const CONTINENT_NAMES: Record<string, string> = { auredia: 'Auredia', trivalen: 'Trivalen', uloren: 'Uloren' };
 
 export default function HudBar() {
   const [hoverHealth, setHoverHealth] = useState(false);
@@ -12,6 +19,9 @@ export default function HudBar() {
 
   const season = useGameStore(s => s.season);
   const tick = useGameStore(s => s.tick);
+  const worldTime = useGameStore(s => s.worldTime);
+  const dayNightPhase = useGameStore(s => s.dayNightPhase);
+  const weather = useGameStore(s => s.weather);
   const playerTitle = useGameStore(s => s.playerTitle);
   const nearestLocation = useGameStore(s => s.nearestLocation);
   const reputation = useGameStore(s => s.reputation);
@@ -20,11 +30,21 @@ export default function HudBar() {
   const environmentCooldowns = useGameStore(s => s.environmentCooldowns);
   const setOverlay = useGameStore(s => s.setOverlay);
   const performEnvironmentAction = useGameStore(s => s.performEnvironmentAction);
-  const health    = useGameStore(s => s.health);
+  const health = useGameStore(s => s.health);
   const maxHealth = useGameStore(s => s.maxHealth);
-  const hunger    = useGameStore(s => s.hunger);
+  const hunger = useGameStore(s => s.hunger);
+  const gold = useGameStore(s => s.gold);
+  const phase = useGameStore(s => s.phase);
+  const mounted = useGameStore(s => s.mounted);
+  const inventory = useGameStore(s => s.inventory);
 
   const locData = nearestLocation ? LOCATIONS.find(l => l.id === nearestLocation) : null;
+  const continent = getContinentAt(playerX, playerY);
+  const continentWeather = continent ? weather[continent] : null;
+  const weaponDmg = getWeaponDamage(inventory);
+  const totalArmor = getTotalArmor(inventory);
+  const mainhand = inventory.equipment['mainhand'];
+  const weaponDef = mainhand ? ITEMS[mainhand.itemId] : null;
 
   const currentTile: TileType = TILE_NAMES[getTileAt(playerX, playerY)] ?? 'grass';
 
@@ -116,14 +136,18 @@ export default function HudBar() {
                 </AnimatePresence>
               </div>
             </div>
-            {/* Season & location row */}
-            <div className="flex items-center gap-4">
+            {/* Info row */}
+            <div className="flex items-center gap-3 flex-wrap">
+            {/* Time + day phase */}
+            <span className="font-mono-game text-[10px] text-mist">{DAY_ICONS[dayNightPhase] ?? '☀️'} {getTimeString(worldTime)}</span>
+            {/* Weather */}
+            {continentWeather && <span className="font-mono-game text-[10px] text-mist">{getWeatherIcon(continentWeather.state as any)}</span>}
+            {/* Season */}
             <div className="flex items-center gap-1.5 relative" onMouseEnter={() => setHoverSeason(true)} onMouseLeave={() => setHoverSeason(false)}>
               <span className="text-sm">{SEASON_ICONS[season]}</span>
               <span className="font-mono-game text-[10px] text-mist uppercase tracking-wider">
                 {SEASON_NAMES[season]}
               </span>
-              <span className="font-mono-game text-[9px] text-mist/50">T{tick}</span>
               {/* Season tooltip */}
               <AnimatePresence>
                 {hoverSeason && (
@@ -140,17 +164,25 @@ export default function HudBar() {
               </AnimatePresence>
             </div>
             {locData && (
-              <div className="flex items-center gap-1.5 border-l border-gold/10 pl-4">
+              <div className="flex items-center gap-1.5 border-l border-gold/10 pl-3">
                 <span className="text-sm">{locData.icon}</span>
                 <span className="font-display text-xs text-parchment">{locData.name}</span>
               </div>
             )}
-            </div>{/* end season row */}
+            {continent && <span className="font-mono-game text-[9px] text-mist/40 border-l border-gold/10 pl-3">{CONTINENT_NAMES[continent] ?? continent}</span>}
+            {phase === 'sailing' && <span className="font-mono-game text-[9px] text-blue-400 border-l border-gold/10 pl-3">⛵ SAILING</span>}
+            {mounted === 'horse' && <span className="font-mono-game text-[9px] text-amber-400 border-l border-gold/10 pl-3">🐎 MOUNTED</span>}
+            </div>{/* end info row */}
           </div>{/* end left col */}
 
-          {/* Center — title */}
-          <div className="font-display text-xs text-gold gold-glow hidden sm:block">
-            {playerTitle}
+          {/* Center — title + stats */}
+          <div className="flex flex-col items-center gap-0.5 hidden sm:flex">
+            <span className="font-display text-xs text-gold gold-glow">{playerTitle}</span>
+            <div className="flex items-center gap-3 font-mono-game text-[9px] text-mist/50">
+              <span>🪙 {gold}g</span>
+              <span>{weaponDef?.icon ?? '✊'} {weaponDmg} dmg</span>
+              <span>🛡 {totalArmor} def</span>
+            </div>
           </div>
 
           {/* Right — rep icons + hotkeys */}

@@ -15,9 +15,18 @@ import ShopPanel from '@/components/game/ShopPanel';
 import FactionPanel from '@/components/game/FactionPanel';
 import QuestLog from '@/components/game/QuestLog';
 import DungeonView from '@/components/game/DungeonView';
+import DialogueView from '@/components/game/DialogueView';
 import SaveLoadPanel from '@/components/game/SaveLoadPanel';
 import Minimap from '@/components/game/Minimap';
 import BuildPanel from '@/components/game/BuildPanel';
+import FastTravelPanel from '@/components/game/FastTravelPanel';
+
+function DialogueOverlay() {
+  const activeDialogue = useGameStore(s => s.activeDialogue);
+  const setActiveDialogue = useGameStore(s => s.setActiveDialogue);
+  if (!activeDialogue) return null;
+  return <DialogueView tree={activeDialogue} onClose={() => setActiveDialogue(null)} />;
+}
 
 export default function GameScreen() {
   const [showConfirm, setShowConfirm] = useState(false);
@@ -52,6 +61,8 @@ export default function GameScreen() {
       <QuestLog />
       <SaveLoadPanel />
       <BuildPanel />
+      <FastTravelPanel />
+      {phase !== 'dungeon' && <DialogueOverlay />}
 
       {/* Death Screen */}
       <AnimatePresence>

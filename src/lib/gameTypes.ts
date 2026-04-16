@@ -1,3 +1,13 @@
+import type { Inventory } from './craftingSystem';
+import type { SkillTree } from './skills';
+import type { Market } from './economySystem';
+import type { FactionState } from './factionSystem';
+import type { Quest } from './questSystem';
+import type { BountyBoard } from './bountyBoard';
+import type { FogMap } from './fogOfWar';
+import type { Housing } from './housing';
+import type { DialogueTree } from './dialogue';
+
 export type ReputationKey = 'conquest' | 'trade' | 'craft' | 'diplomacy' | 'exploration' | 'arcane';
 
 export interface Reputation {
@@ -92,9 +102,9 @@ export interface EnvironmentAction {
   itemReward?: { id: string; name: string; icon: string; quantity: number; type: ItemType; description: string };
 }
 
-export type OverlayType = 'none' | 'player' | 'chronicle' | 'map' | 'help' | 'inventory' | 'crafting' | 'skills' | 'quests' | 'faction' | 'shop' | 'build' | 'saveload';
+export type OverlayType = 'none' | 'player' | 'chronicle' | 'map' | 'help' | 'inventory' | 'crafting' | 'skills' | 'quests' | 'faction' | 'shop' | 'build' | 'saveload' | 'fasttravel';
 
-export type ItemType = 'tool' | 'weapon' | 'resource' | 'food' | 'armor' | 'misc';
+export type ItemType = 'tool' | 'weapon' | 'resource' | 'food' | 'armor' | 'misc' | 'potion' | 'trade_good';
 
 export interface HotbarItem {
   id: string;
@@ -109,10 +119,9 @@ export type TutorialStep = 'cinematic' | 'movement' | 'hotkeys' | 'landmark' | '
 
 export type DayNightPhase = 'dawn' | 'day' | 'dusk' | 'night';
 export type WeatherState = 'clear' | 'cloudy' | 'rain' | 'storm';
+export type MountState = 'none' | 'horse' | 'boat';
 
 export interface GameState {
-  hotbar: HotbarItem[];
-  activeSlot: number;
   phase: 'title' | 'playing' | 'chronicle' | 'dead' | 'sailing' | 'dungeon';
   health: number;
   maxHealth: number;
@@ -125,19 +134,56 @@ export interface GameState {
   season: Season;
   seasonTick: number;
   seed: number;
+
+  // Inventory & items
+  inventory: Inventory;
+  hotbar: HotbarItem[];
+  activeSlot: number;
+  gold: number;
+
+  // Skills
+  skills: SkillTree;
+
+  // Economy
+  markets: Record<string, Market>;
+
+  // Factions (player standing = legacy 6-axis, kingdom simulation = factionStates)
   reputation: Reputation;
   factions: FactionStanding;
+  factionStates: Record<string, FactionState>;
+
+  // Quests
+  quests: Quest[];
+  bountyBoards: Record<string, BountyBoard>;
+
+  // World
   currentLocation: string;
   nearestLocation: string | null;
   playerX: number;
   playerY: number;
+  facingDir: { dx: number; dy: number };
+  mounted: MountState;
+  activeCaveId: number | null;
+
+  // NPCs & dialogue
   npcs: Npc[];
+  activeDialogue: DialogueTree | null;
+
+  // Chronicle & events
   chronicle: ChronicleEntry[];
   currentEvent: GameEvent | null;
   lastResult: string | null;
   visitedLocations: string[];
   completedEvents: string[];
   playerTitle: string;
+
+  // Fog of war
+  fog: FogMap;
+
+  // Housing
+  housing: Housing;
+
+  // UI
   overlay: OverlayType;
   tutorialStep: TutorialStep;
   environmentCooldowns: Record<string, number>;

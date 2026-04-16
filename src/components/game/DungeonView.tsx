@@ -21,7 +21,8 @@ export default function DungeonView() {
   const phase = useGameStore(s => s.phase);
   const setPhase = useGameStore(s => s.setOverlay); // use backToGame to exit
 
-  const [dungeon] = useState<DungeonData>(() => generateDungeon(1, 'auredia'));
+  const activeCaveId = useGameStore(s => s.activeCaveId);
+  const [dungeon] = useState<DungeonData>(() => generateDungeon(activeCaveId ?? 1, 'auredia'));
   const playerRef = useRef({ x: 0, y: 0, vx: 0, vy: 0, onGround: false });
   const keysRef = useRef(new Set<string>());
 
