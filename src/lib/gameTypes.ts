@@ -92,7 +92,7 @@ export interface EnvironmentAction {
   itemReward?: { id: string; name: string; icon: string; quantity: number; type: ItemType; description: string };
 }
 
-export type OverlayType = 'none' | 'player' | 'chronicle' | 'map' | 'help';
+export type OverlayType = 'none' | 'player' | 'chronicle' | 'map' | 'help' | 'inventory' | 'crafting' | 'skills' | 'quests' | 'faction' | 'shop' | 'build' | 'saveload';
 
 export type ItemType = 'tool' | 'weapon' | 'resource' | 'food' | 'armor' | 'misc';
 
@@ -107,17 +107,24 @@ export interface HotbarItem {
 
 export type TutorialStep = 'cinematic' | 'movement' | 'hotkeys' | 'landmark' | 'done';
 
+export type DayNightPhase = 'dawn' | 'day' | 'dusk' | 'night';
+export type WeatherState = 'clear' | 'cloudy' | 'rain' | 'storm';
+
 export interface GameState {
   hotbar: HotbarItem[];
   activeSlot: number;
-  phase: 'title' | 'playing' | 'chronicle' | 'dead';
+  phase: 'title' | 'playing' | 'chronicle' | 'dead' | 'sailing' | 'dungeon';
   health: number;
   maxHealth: number;
   hunger: number;
   isMoving: boolean;
   tick: number;
+  worldTime: number;
+  dayNightPhase: DayNightPhase;
+  weather: Record<string, { state: WeatherState; duration: number }>;
   season: Season;
   seasonTick: number;
+  seed: number;
   reputation: Reputation;
   factions: FactionStanding;
   currentLocation: string;

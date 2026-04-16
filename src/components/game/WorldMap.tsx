@@ -1,8 +1,9 @@
 import { useEffect, useRef, useLayoutEffect, useCallback } from 'react';
-import { useGameStore, getMap } from '@/lib/gameStore';
+import { useGameStore } from '@/lib/gameStore';
 import {
   MAP_W, MAP_H, CHUNK_SIZE, NUM_CHUNKS_X, NUM_CHUNKS_Y,
   LOCATION_COORDS, PARSED_PALETTES,
+  getChunkData, ChunkData,
   WorldObject, AmbientEntity,
   WorldObjectType, AmbientEntityType,
 } from '@/lib/mapGenerator';
@@ -10,54 +11,26 @@ import { LOCATIONS } from '@/lib/gameData';
 import { Season } from '@/lib/gameTypes';
 
 // ── Location icons ─────────────────────────────────────────────────────────
-const LOC_ICONS: Record<string, string> = {
-  ashenford: '🏘️', saltmoor: '🏙️', ironhold: '🏰', thornwick: '🌲',
-  graygate: '🏛️', dustfall: '🗿', crossroads: '🍺', marshend: '🌿',
-  badlands: '💀', coldpeak: '⛰️', ruins_of_aether: '✨',
-};
+const LOC_ICONS: Record<string, string> = {};
+for (const loc of LOCATIONS) LOC_ICONS[loc.id] = loc.icon;
 
-// ── Object colours (r,g,b) for fast lookup ─────────────────────────────────
+// ── Object colours ─────────────────────────────────────────────────────────
 const OBJ_COLORS: Record<WorldObjectType, [number, number, number]> = {
-  farm:         [160, 120,  60],
-  barn:         [140,  80,  40],
-  windmill:     [200, 180, 140],
-  watchtower:   [ 90,  90,  90],
-  dock:         [100,  70,  40],
-  bridge:       [160, 140,  90],
-  campfire:     [220, 120,  30],
-  market_stall: [180, 140,  60],
-  ruins_pillar: [130, 120, 100],
-  stone_wall:   [110, 110, 105],
-  stone_circle: [140, 135, 120],
-  hut:          [150, 110,  70],
-  well:         [100,  90,  80],
-  shrine:       [210, 190, 130],
-  gate:         [ 80,  75,  65],
-  fence:        [170, 140,  90],
+  farm: [160, 120, 60], barn: [140, 80, 40], windmill: [200, 180, 140],
+  watchtower: [90, 90, 90], dock: [100, 70, 40], bridge: [160, 140, 90],
+  campfire: [220, 120, 30], market_stall: [180, 140, 60], ruins_pillar: [130, 120, 100],
+  stone_wall: [110, 110, 105], stone_circle: [140, 135, 120], hut: [150, 110, 70],
+  well: [100, 90, 80], shrine: [210, 190, 130], gate: [80, 75, 65], fence: [170, 140, 90],
 };
 
-// ── Entity colours ─────────────────────────────────────────────────────────
 const ENTITY_COLORS: Record<AmbientEntityType, string> = {
-  deer:      '#a07850',
-  sheep:     '#e8e4d8',
-  wolf:      '#606060',
-  eagle:     '#705030',
-  rabbit:    '#d0c8b0',
-  fish:      '#5090c0',
-  crow:      '#303038',
-  villager:  '#c8a870',
-  fisherman: '#7090a0',
-  guard:     '#808878',
-  merchant:  '#c0904a',
-  traveler:  '#a09070',
+  deer: '#a07850', sheep: '#e8e4d8', wolf: '#606060', eagle: '#705030',
+  rabbit: '#d0c8b0', fish: '#5090c0', crow: '#303038', villager: '#c8a870',
+  fisherman: '#7090a0', guard: '#808878', merchant: '#c0904a', traveler: '#a09070',
 };
 
-// ── Chunk baking ───────────────────────────────────────────────────────────
-function bakeChunk(
-  chunkX: number, chunkY: number,
-  tiles: Uint8Array, roads: Uint8Array,
-  season: Season,
-): HTMLCanvasElement {
+// ── Chunk canvas baking ────────────────────────────────────────────────────
+function bakeChunkCanvas(chunk: ChunkData, season: Season): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = CHUNK_SIZE; c.height = CHUNK_SIZE;
   const ctx = c.getContext('2d')!;
@@ -67,17 +40,12 @@ function bakeChunk(
 
   for (let ty = 0; ty < CHUNK_SIZE; ty++) {
     for (let tx = 0; tx < CHUNK_SIZE; tx++) {
-      const wx = chunkX * CHUNK_SIZE + tx;
-      const wy = chunkY * CHUNK_SIZE + ty;
-      if (wx >= MAP_W || wy >= MAP_H) continue;
-      const mapIdx = wy * MAP_W + wx;
-      const isRoad = roads[mapIdx] === 1;
-      const code = isRoad ? 11 : tiles[mapIdx]; // 11 = ROAD
+      const localIdx = ty * CHUNK_SIZE + tx;
+      const isRoad = chunk.roads[localIdx] === 1;
+      const code = isRoad ? 11 : chunk.tiles[localIdx];
       const [r, g, b] = pal[code] ?? [50, 50, 50];
-
-      // Subtle variation per tile for texture
-      const v = ((wx * 3 + wy * 7) ^ (wx ^ wy)) & 0x07;
-      const pix = (ty * CHUNK_SIZE + tx) * 4;
+      const v = ((tx * 3 + ty * 7) ^ (tx ^ ty)) & 0x07;
+      const pix = localIdx * 4;
       d[pix]     = Math.min(255, r + v - 3);
       d[pix + 1] = Math.min(255, g + v - 3);
       d[pix + 2] = Math.min(255, b + v - 3);
@@ -89,537 +57,266 @@ function bakeChunk(
 }
 
 // ── Object rendering ───────────────────────────────────────────────────────
-function drawObject(
-  ctx: CanvasRenderingContext2D,
-  obj: WorldObject, sx: number, sy: number,
-  zoom: number, time: number,
-) {
+function drawObject(ctx: CanvasRenderingContext2D, obj: WorldObject, sx: number, sy: number, zoom: number, time: number) {
   const z = zoom;
   const [r, g, b] = OBJ_COLORS[obj.type] ?? [150, 150, 150];
   const col = `rgb(${r},${g},${b})`;
-
-  if (z < 5) {
-    // tiny dot
-    ctx.fillStyle = col;
-    ctx.fillRect(sx - 1, sy - 1, 2, 2);
-    return;
-  }
-
-  ctx.save();
-  ctx.translate(sx, sy);
-
+  if (z < 5) { ctx.fillStyle = col; ctx.fillRect(sx - 1, sy - 1, 2, 2); return; }
+  ctx.save(); ctx.translate(sx, sy);
   switch (obj.type) {
-    case 'hut':
-    case 'farm': {
-      // body
+    case 'hut': case 'farm': {
       ctx.fillStyle = col;
       ctx.fillRect(-z * 1.2, -z * 0.7, z * 2.4, z * 1.4);
-      // roof triangle
       ctx.fillStyle = `rgb(${Math.max(0, r - 40)},${Math.max(0, g - 30)},${Math.max(0, b - 20)})`;
-      ctx.beginPath();
-      ctx.moveTo(-z * 1.5, -z * 0.7);
-      ctx.lineTo(0, -z * 2.0);
-      ctx.lineTo(z * 1.5, -z * 0.7);
-      ctx.closePath();
-      ctx.fill();
-      // door
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(-z * 0.3, z * 0.1, z * 0.6, z * 0.6);
+      ctx.beginPath(); ctx.moveTo(-z * 1.5, -z * 0.7); ctx.lineTo(0, -z * 2.0); ctx.lineTo(z * 1.5, -z * 0.7); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(-z * 0.3, z * 0.1, z * 0.6, z * 0.6);
       break;
     }
     case 'barn': {
-      ctx.fillStyle = col;
-      ctx.fillRect(-z * 1.8, -z * 1.0, z * 3.6, z * 2.0);
+      ctx.fillStyle = col; ctx.fillRect(-z * 1.8, -z * 1.0, z * 3.6, z * 2.0);
       ctx.fillStyle = `rgb(${Math.max(0, r - 50)},${Math.max(0, g - 30)},${Math.max(0, b - 10)})`;
-      ctx.beginPath();
-      ctx.moveTo(-z * 2.0, -z * 1.0);
-      ctx.lineTo(0, -z * 2.5);
-      ctx.lineTo(z * 2.0, -z * 1.0);
-      ctx.closePath();
-      ctx.fill();
-      // X on barn door
-      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-      ctx.lineWidth = z * 0.15;
-      ctx.beginPath();
-      ctx.moveTo(-z * 0.8, z * 1.0); ctx.lineTo(z * 0.8, -z * 0.2);
-      ctx.moveTo(z * 0.8, z * 1.0); ctx.lineTo(-z * 0.8, -z * 0.2);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-z * 2.0, -z * 1.0); ctx.lineTo(0, -z * 2.5); ctx.lineTo(z * 2.0, -z * 1.0); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = z * 0.15;
+      ctx.beginPath(); ctx.moveTo(-z * 0.8, z * 1.0); ctx.lineTo(z * 0.8, -z * 0.2); ctx.moveTo(z * 0.8, z * 1.0); ctx.lineTo(-z * 0.8, -z * 0.2); ctx.stroke();
       break;
     }
     case 'windmill': {
       const spin = time * 0.0008 * (1 + obj.variant * 0.3);
-      // base tower
-      ctx.fillStyle = col;
-      ctx.fillRect(-z * 0.5, -z * 2.0, z, z * 2.5);
-      // sails
-      ctx.strokeStyle = `rgb(${Math.max(0, r - 20)},${Math.max(0, g - 20)},${Math.max(0, b + 10)})`;
-      ctx.lineWidth = z * 0.5;
-      for (let i = 0; i < 4; i++) {
-        const a = spin + (i / 4) * Math.PI * 2;
-        ctx.beginPath();
-        ctx.moveTo(0, -z * 1.5);
-        ctx.lineTo(Math.cos(a) * z * 2.2, -z * 1.5 + Math.sin(a) * z * 2.2);
-        ctx.stroke();
-      }
+      ctx.fillStyle = col; ctx.fillRect(-z * 0.5, -z * 2.0, z, z * 2.5);
+      ctx.strokeStyle = `rgb(${Math.max(0, r - 20)},${Math.max(0, g - 20)},${Math.max(0, b + 10)})`; ctx.lineWidth = z * 0.5;
+      for (let i = 0; i < 4; i++) { const a = spin + (i / 4) * Math.PI * 2; ctx.beginPath(); ctx.moveTo(0, -z * 1.5); ctx.lineTo(Math.cos(a) * z * 2.2, -z * 1.5 + Math.sin(a) * z * 2.2); ctx.stroke(); }
       break;
     }
     case 'watchtower': {
-      // tower body
-      ctx.fillStyle = col;
-      ctx.fillRect(-z * 0.9, -z * 3.0, z * 1.8, z * 3.5);
-      // battlements
+      ctx.fillStyle = col; ctx.fillRect(-z * 0.9, -z * 3.0, z * 1.8, z * 3.5);
       ctx.fillStyle = `rgb(${Math.max(0, r - 15)},${Math.max(0, g - 15)},${Math.max(0, b - 10)})`;
-      for (let i = 0; i < 3; i++) {
-        ctx.fillRect(-z * 0.9 + i * z * 0.7, -z * 3.6, z * 0.45, z * 0.6);
-      }
-      // arrow slit
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(-z * 0.12, -z * 2.0, z * 0.24, z * 0.6);
+      for (let i = 0; i < 3; i++) ctx.fillRect(-z * 0.9 + i * z * 0.7, -z * 3.6, z * 0.45, z * 0.6);
+      ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(-z * 0.12, -z * 2.0, z * 0.24, z * 0.6);
       break;
     }
     case 'stone_wall': {
-      ctx.fillStyle = col;
-      ctx.fillRect(-z * 0.6, -z * 0.5, z * 1.2, z * 1.0);
-      ctx.strokeStyle = 'rgba(0,0,0,0.2)';
-      ctx.lineWidth = 0.5;
-      ctx.strokeRect(-z * 0.6, -z * 0.5, z * 1.2, z * 1.0);
+      ctx.fillStyle = col; ctx.fillRect(-z * 0.6, -z * 0.5, z * 1.2, z * 1.0);
+      ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 0.5; ctx.strokeRect(-z * 0.6, -z * 0.5, z * 1.2, z * 1.0);
       break;
     }
     case 'market_stall': {
-      // awning
       const awningCol = ['#e05050', '#50a050', '#5050e0', '#e0a020'][obj.variant % 4];
-      ctx.fillStyle = awningCol;
-      ctx.fillRect(-z * 1.6, -z * 1.8, z * 3.2, z * 0.5);
-      // table
-      ctx.fillStyle = col;
-      ctx.fillRect(-z * 1.4, -z * 1.3, z * 2.8, z * 1.0);
-      // legs
+      ctx.fillStyle = awningCol; ctx.fillRect(-z * 1.6, -z * 1.8, z * 3.2, z * 0.5);
+      ctx.fillStyle = col; ctx.fillRect(-z * 1.4, -z * 1.3, z * 2.8, z * 1.0);
       ctx.fillStyle = `rgb(${Math.max(0, r - 40)},${Math.max(0, g - 30)},${Math.max(0, b - 20)})`;
-      ctx.fillRect(-z * 1.2, -z * 0.3, z * 0.25, z * 0.6);
-      ctx.fillRect(z * 0.95, -z * 0.3, z * 0.25, z * 0.6);
+      ctx.fillRect(-z * 1.2, -z * 0.3, z * 0.25, z * 0.6); ctx.fillRect(z * 0.95, -z * 0.3, z * 0.25, z * 0.6);
       break;
     }
     case 'ruins_pillar': {
       const h = z * (1.5 + (obj.variant % 3) * 0.8);
-      ctx.fillStyle = col;
-      ctx.fillRect(-z * 0.5, -h, z, h);
-      // crumble top
+      ctx.fillStyle = col; ctx.fillRect(-z * 0.5, -h, z, h);
       ctx.fillStyle = `rgb(${Math.max(0, r - 20)},${Math.max(0, g - 15)},${Math.max(0, b - 10)})`;
-      ctx.fillRect(-z * 0.6, -h - z * 0.3, z * 0.4, z * 0.3);
-      ctx.fillRect(z * 0.2, -h - z * 0.5, z * 0.4, z * 0.5);
+      ctx.fillRect(-z * 0.6, -h - z * 0.3, z * 0.4, z * 0.3); ctx.fillRect(z * 0.2, -h - z * 0.5, z * 0.4, z * 0.5);
       break;
     }
     case 'stone_circle': {
-      ctx.strokeStyle = col;
-      ctx.lineWidth = z * 0.5;
-      ctx.beginPath();
-      ctx.arc(0, 0, z * 0.8, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.strokeStyle = col; ctx.lineWidth = z * 0.5; ctx.beginPath(); ctx.arc(0, 0, z * 0.8, 0, Math.PI * 2); ctx.stroke();
       break;
     }
     case 'well': {
-      ctx.strokeStyle = col;
-      ctx.lineWidth = z * 0.4;
-      ctx.beginPath();
-      ctx.arc(0, 0, z * 1.0, 0, Math.PI * 2);
-      ctx.stroke();
-      // cross beam
-      ctx.strokeStyle = `rgb(${Math.max(0, r - 30)},${Math.max(0, g - 20)},${Math.max(0, b)})`;
-      ctx.lineWidth = z * 0.3;
-      ctx.beginPath();
-      ctx.moveTo(-z, -z * 0.8); ctx.lineTo(z, -z * 0.8);
-      ctx.stroke();
+      ctx.strokeStyle = col; ctx.lineWidth = z * 0.4; ctx.beginPath(); ctx.arc(0, 0, z * 1.0, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = `rgb(${Math.max(0, r - 30)},${Math.max(0, g - 20)},${Math.max(0, b)})`; ctx.lineWidth = z * 0.3;
+      ctx.beginPath(); ctx.moveTo(-z, -z * 0.8); ctx.lineTo(z, -z * 0.8); ctx.stroke();
       break;
     }
     case 'campfire': {
       const flicker = 0.7 + Math.sin(time * 0.005 + obj.variant) * 0.3;
-      // glow
       const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, z * 2.5 * flicker);
-      grd.addColorStop(0, 'rgba(255,180,50,0.6)');
-      grd.addColorStop(1, 'rgba(255,80,10,0)');
-      ctx.fillStyle = grd;
-      ctx.beginPath();
-      ctx.arc(0, 0, z * 2.5 * flicker, 0, Math.PI * 2);
-      ctx.fill();
-      // logs
-      ctx.fillStyle = '#5a3a1a';
-      ctx.fillRect(-z * 0.9, z * 0.2, z * 0.5, z * 0.3);
-      ctx.fillRect(z * 0.4, z * 0.2, z * 0.5, z * 0.3);
-      // flame
+      grd.addColorStop(0, 'rgba(255,180,50,0.6)'); grd.addColorStop(1, 'rgba(255,80,10,0)');
+      ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(0, 0, z * 2.5 * flicker, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#5a3a1a'; ctx.fillRect(-z * 0.9, z * 0.2, z * 0.5, z * 0.3); ctx.fillRect(z * 0.4, z * 0.2, z * 0.5, z * 0.3);
       ctx.fillStyle = `rgba(255,${Math.round(120 + flicker * 80)},30,0.9)`;
-      ctx.beginPath();
-      ctx.ellipse(0, -z * 0.6 * flicker, z * 0.5, z * 0.9 * flicker, 0, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.beginPath(); ctx.ellipse(0, -z * 0.6 * flicker, z * 0.5, z * 0.9 * flicker, 0, 0, Math.PI * 2); ctx.fill();
       break;
     }
     case 'dock': {
-      ctx.fillStyle = col;
-      ctx.fillRect(-z * 0.4, -z * 2.5, z * 0.8, z * 3.0);
-      // planks
-      ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-      ctx.lineWidth = 0.5;
-      for (let i = 0; i < 4; i++) {
-        ctx.beginPath();
-        ctx.moveTo(-z * 0.4, -z * 2.0 + i * z * 0.7);
-        ctx.lineTo(z * 0.4, -z * 2.0 + i * z * 0.7);
-        ctx.stroke();
-      }
+      ctx.fillStyle = col; ctx.fillRect(-z * 0.4, -z * 2.5, z * 0.8, z * 3.0);
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 0.5;
+      for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(-z * 0.4, -z * 2.0 + i * z * 0.7); ctx.lineTo(z * 0.4, -z * 2.0 + i * z * 0.7); ctx.stroke(); }
       break;
     }
     case 'shrine': {
-      // upright cross
-      ctx.fillStyle = col;
-      ctx.fillRect(-z * 0.25, -z * 2.0, z * 0.5, z * 2.5);
-      ctx.fillRect(-z * 0.9, -z * 1.4, z * 1.8, z * 0.45);
+      ctx.fillStyle = col; ctx.fillRect(-z * 0.25, -z * 2.0, z * 0.5, z * 2.5); ctx.fillRect(-z * 0.9, -z * 1.4, z * 1.8, z * 0.45);
       break;
     }
     case 'gate': {
-      const gateCol = `rgb(${r},${g},${b})`;
-      ctx.fillStyle = gateCol;
-      ctx.fillRect(-z * 2.0, -z * 2.5, z * 1.0, z * 2.5);
-      ctx.fillRect(z * 1.0, -z * 2.5, z * 1.0, z * 2.5);
-      // arch
-      ctx.strokeStyle = gateCol;
-      ctx.lineWidth = z * 0.8;
-      ctx.beginPath();
-      ctx.arc(0, -z * 2.5, z * 1.5, Math.PI, 0, false);
-      ctx.stroke();
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 2.0, -z * 2.5, z * 1.0, z * 2.5); ctx.fillRect(z * 1.0, -z * 2.5, z * 1.0, z * 2.5);
+      ctx.strokeStyle = col; ctx.lineWidth = z * 0.8;
+      ctx.beginPath(); ctx.arc(0, -z * 2.5, z * 1.5, Math.PI, 0, false); ctx.stroke();
       break;
     }
     case 'fence': {
-      ctx.strokeStyle = col;
-      ctx.lineWidth = z * 0.3;
+      ctx.strokeStyle = col; ctx.lineWidth = z * 0.3;
       ctx.beginPath();
       ctx.moveTo(-z * 0.8, z * 0.2); ctx.lineTo(-z * 0.8, -z * 0.8);
-      ctx.moveTo(z * 0.8, z * 0.2);  ctx.lineTo(z * 0.8, -z * 0.8);
+      ctx.moveTo(z * 0.8, z * 0.2); ctx.lineTo(z * 0.8, -z * 0.8);
       ctx.moveTo(-z * 0.8, -z * 0.35); ctx.lineTo(z * 0.8, -z * 0.35);
       ctx.stroke();
       break;
     }
     default:
-      ctx.fillStyle = col;
-      ctx.fillRect(-z * 0.7, -z * 0.7, z * 1.4, z * 1.4);
+      ctx.fillStyle = col; ctx.fillRect(-z * 0.7, -z * 0.7, z * 1.4, z * 1.4);
   }
-
   ctx.restore();
 }
 
 // ── Entity rendering ───────────────────────────────────────────────────────
-function drawEntity(
-  ctx: CanvasRenderingContext2D,
-  entity: AmbientEntity, sx: number, sy: number,
-  zoom: number,
-) {
+function drawEntity(ctx: CanvasRenderingContext2D, entity: AmbientEntity, sx: number, sy: number, zoom: number) {
   const col = ENTITY_COLORS[entity.type] ?? '#aaa';
   const z = zoom;
-
-  if (z < 5) {
-    ctx.fillStyle = col;
-    ctx.fillRect(sx - 1, sy - 1, 2, 2);
-    return;
-  }
-
-  ctx.save();
-  ctx.translate(sx, sy);
-
+  if (z < 5) { ctx.fillStyle = col; ctx.fillRect(sx - 1, sy - 1, 2, 2); return; }
+  ctx.save(); ctx.translate(sx, sy);
   switch (entity.type) {
     case 'deer': {
-      ctx.fillStyle = col;
-      ctx.fillRect(-z * 0.9, -z * 0.6, z * 1.8, z * 0.9);
-      ctx.beginPath();
-      ctx.arc(-z * 0.5, -z * 1.0, z * 0.45, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillStyle = col; ctx.fillRect(-z * 0.9, -z * 0.6, z * 1.8, z * 0.9);
+      ctx.beginPath(); ctx.arc(-z * 0.5, -z * 1.0, z * 0.45, 0, Math.PI * 2); ctx.fill();
       break;
     }
     case 'sheep': {
-      ctx.fillStyle = col;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, z * 1.1, z * 0.75, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#a09080';
-      ctx.beginPath();
-      ctx.arc(-z * 0.8, -z * 0.4, z * 0.4, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(0, 0, z * 1.1, z * 0.75, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#a09080'; ctx.beginPath(); ctx.arc(-z * 0.8, -z * 0.4, z * 0.4, 0, Math.PI * 2); ctx.fill();
       break;
     }
     case 'wolf': {
-      ctx.fillStyle = col;
-      ctx.fillRect(-z * 1.0, -z * 0.5, z * 2.0, z * 1.0);
-      ctx.beginPath();
-      ctx.moveTo(-z * 0.9, -z * 0.5);
-      ctx.lineTo(-z * 1.3, -z * 1.3);
-      ctx.lineTo(-z * 0.4, -z * 0.5);
-      ctx.closePath();
-      ctx.fill();
+      ctx.fillStyle = col; ctx.fillRect(-z * 1.0, -z * 0.5, z * 2.0, z * 1.0);
+      ctx.beginPath(); ctx.moveTo(-z * 0.9, -z * 0.5); ctx.lineTo(-z * 1.3, -z * 1.3); ctx.lineTo(-z * 0.4, -z * 0.5); ctx.closePath(); ctx.fill();
       break;
     }
-    case 'eagle':
-    case 'crow': {
-      ctx.strokeStyle = col;
-      ctx.lineWidth = z * 0.35;
-      ctx.beginPath();
-      ctx.moveTo(-z * 1.4, 0);
-      ctx.quadraticCurveTo(-z * 0.5, -z * 0.7, 0, 0);
-      ctx.quadraticCurveTo(z * 0.5, -z * 0.7, z * 1.4, 0);
-      ctx.stroke();
+    case 'eagle': case 'crow': {
+      ctx.strokeStyle = col; ctx.lineWidth = z * 0.35;
+      ctx.beginPath(); ctx.moveTo(-z * 1.4, 0); ctx.quadraticCurveTo(-z * 0.5, -z * 0.7, 0, 0); ctx.quadraticCurveTo(z * 0.5, -z * 0.7, z * 1.4, 0); ctx.stroke();
       break;
     }
     case 'rabbit': {
-      ctx.fillStyle = col;
-      ctx.beginPath();
-      ctx.ellipse(0, z * 0.2, z * 0.55, z * 0.45, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // ears
-      ctx.fillRect(-z * 0.3, -z * 0.7, z * 0.2, z * 0.6);
-      ctx.fillRect(z * 0.1, -z * 0.8, z * 0.2, z * 0.6);
+      ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(0, z * 0.2, z * 0.55, z * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(-z * 0.3, -z * 0.7, z * 0.2, z * 0.6); ctx.fillRect(z * 0.1, -z * 0.8, z * 0.2, z * 0.6);
       break;
     }
     case 'fish': {
-      ctx.fillStyle = col;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, z * 0.9, z * 0.4, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(z * 0.9, 0);
-      ctx.lineTo(z * 1.5, -z * 0.4);
-      ctx.lineTo(z * 1.5, z * 0.4);
-      ctx.closePath();
-      ctx.fill();
+      ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(0, 0, z * 0.9, z * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(z * 0.9, 0); ctx.lineTo(z * 1.5, -z * 0.4); ctx.lineTo(z * 1.5, z * 0.4); ctx.closePath(); ctx.fill();
       break;
     }
-    case 'villager':
-    case 'traveler':
-    case 'fisherman':
-    case 'merchant': {
-      // body
-      ctx.fillStyle = col;
-      ctx.fillRect(-z * 0.35, -z * 0.9, z * 0.7, z * 0.9);
-      // head
-      ctx.beginPath();
-      ctx.arc(0, -z * 1.2, z * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-      // legs
-      ctx.fillStyle = `rgba(0,0,0,0.35)`;
-      ctx.fillRect(-z * 0.35, 0, z * 0.3, z * 0.55);
-      ctx.fillRect(z * 0.05, 0, z * 0.3, z * 0.55);
+    case 'villager': case 'traveler': case 'fisherman': case 'merchant': {
+      ctx.fillStyle = col; ctx.fillRect(-z * 0.35, -z * 0.9, z * 0.7, z * 0.9);
+      ctx.beginPath(); ctx.arc(0, -z * 1.2, z * 0.35, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(-z * 0.35, 0, z * 0.3, z * 0.55); ctx.fillRect(z * 0.05, 0, z * 0.3, z * 0.55);
       break;
     }
     case 'guard': {
-      ctx.fillStyle = col;
-      ctx.fillRect(-z * 0.4, -z * 1.0, z * 0.8, z * 1.0);
-      ctx.beginPath();
-      ctx.arc(0, -z * 1.35, z * 0.4, 0, Math.PI * 2);
-      ctx.fill();
-      // spear
-      ctx.strokeStyle = '#8a7050';
-      ctx.lineWidth = z * 0.2;
-      ctx.beginPath();
-      ctx.moveTo(z * 0.55, -z * 1.8);
-      ctx.lineTo(z * 0.55, z * 0.6);
-      ctx.stroke();
+      ctx.fillStyle = col; ctx.fillRect(-z * 0.4, -z * 1.0, z * 0.8, z * 1.0);
+      ctx.beginPath(); ctx.arc(0, -z * 1.35, z * 0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#8a7050'; ctx.lineWidth = z * 0.2;
+      ctx.beginPath(); ctx.moveTo(z * 0.55, -z * 1.8); ctx.lineTo(z * 0.55, z * 0.6); ctx.stroke();
       ctx.fillStyle = '#c0c0b0';
-      ctx.beginPath();
-      ctx.moveTo(z * 0.4, -z * 1.8);
-      ctx.lineTo(z * 0.7, -z * 1.8);
-      ctx.lineTo(z * 0.55, -z * 2.3);
-      ctx.closePath();
-      ctx.fill();
+      ctx.beginPath(); ctx.moveTo(z * 0.4, -z * 1.8); ctx.lineTo(z * 0.7, -z * 1.8); ctx.lineTo(z * 0.55, -z * 2.3); ctx.closePath(); ctx.fill();
       break;
     }
     default: {
-      ctx.fillStyle = col;
-      ctx.beginPath();
-      ctx.arc(0, 0, z * 0.6, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, z * 0.6, 0, Math.PI * 2); ctx.fill();
     }
   }
   ctx.restore();
 }
 
-// ── Human player sprite ────────────────────────────────────────────────────
+// ── Player sprite ──────────────────────────────────────────────────────────
 type MoveDir = 'up' | 'down' | 'left' | 'right';
 
-function drawHumanPlayer(
-  ctx: CanvasRenderingContext2D,
-  sx: number, sy: number,
-  zoom: number,
-  dir: MoveDir,
-  time: number,
-) {
-  if (zoom < 4) {
-    // Tiny — just a bright dot
-    ctx.fillStyle = '#e8d490';
-    ctx.fillRect(sx - 1, sy - 1, 3, 3);
-    return;
-  }
-
+function drawHumanPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, dir: MoveDir, time: number) {
+  if (zoom < 4) { ctx.fillStyle = '#e8d490'; ctx.fillRect(sx - 1, sy - 1, 3, 3); return; }
   const z = zoom;
-  const walkCycle = Math.sin(time * 0.006) * 0.4; // leg swing amplitude
-  const bobY      = Math.abs(Math.sin(time * 0.006)) * z * 0.15; // body bob
+  const walkCycle = Math.sin(time * 0.006) * 0.4;
+  const bobY = Math.abs(Math.sin(time * 0.006)) * z * 0.15;
   const facingLeft = dir === 'left';
-
-  ctx.save();
-  ctx.translate(sx, sy);
+  ctx.save(); ctx.translate(sx, sy);
   if (facingLeft) ctx.scale(-1, 1);
 
-  // Shadow
-  ctx.beginPath();
-  ctx.ellipse(0, z * 0.3, z * 0.9, z * 0.25, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, z * 0.3, z * 0.9, z * 0.25, 0, 0, Math.PI * 2); ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-z * 0.7, -z * 1.6 + bobY); ctx.lineTo(-z * 0.9, z * 0.4 + bobY); ctx.lineTo(z * 0.9, z * 0.4 + bobY); ctx.lineTo(z * 0.7, -z * 1.6 + bobY); ctx.closePath(); ctx.fillStyle = dir === 'up' ? '#6a5a3a' : '#7a6a42'; ctx.fill();
 
-  // Cloak / cape (behind body)
-  ctx.beginPath();
-  ctx.moveTo(-z * 0.7, -z * 1.6 + bobY);
-  ctx.lineTo(-z * 0.9, z * 0.4 + bobY);
-  ctx.lineTo(z * 0.9, z * 0.4 + bobY);
-  ctx.lineTo(z * 0.7, -z * 1.6 + bobY);
-  ctx.closePath();
-  ctx.fillStyle = dir === 'up' ? '#6a5a3a' : '#7a6a42';
-  ctx.fill();
+  ctx.save(); ctx.translate(-z * 0.22, z * 0.15 + bobY); ctx.rotate(-walkCycle);
+  ctx.fillStyle = '#4a3a22'; ctx.fillRect(-z * 0.18, 0, z * 0.36, z * 0.9);
+  ctx.fillStyle = '#2a1a0a'; ctx.fillRect(-z * 0.2, z * 0.75, z * 0.4, z * 0.22); ctx.restore();
 
-  // Back leg
-  const backLegSwing = -walkCycle;
-  ctx.save();
-  ctx.translate(-z * 0.22, z * 0.15 + bobY);
-  ctx.rotate(backLegSwing);
-  ctx.fillStyle = '#4a3a22';
-  ctx.fillRect(-z * 0.18, 0, z * 0.36, z * 0.9);
-  // boot
-  ctx.fillStyle = '#2a1a0a';
-  ctx.fillRect(-z * 0.2, z * 0.75, z * 0.4, z * 0.22);
-  ctx.restore();
+  ctx.save(); ctx.translate(z * 0.22, z * 0.15 + bobY); ctx.rotate(walkCycle);
+  ctx.fillStyle = '#5a4a2a'; ctx.fillRect(-z * 0.18, 0, z * 0.36, z * 0.9);
+  ctx.fillStyle = '#2a1a0a'; ctx.fillRect(-z * 0.2, z * 0.75, z * 0.4, z * 0.22); ctx.restore();
 
-  // Front leg
-  ctx.save();
-  ctx.translate(z * 0.22, z * 0.15 + bobY);
-  ctx.rotate(walkCycle);
-  ctx.fillStyle = '#5a4a2a';
-  ctx.fillRect(-z * 0.18, 0, z * 0.36, z * 0.9);
-  // boot
-  ctx.fillStyle = '#2a1a0a';
-  ctx.fillRect(-z * 0.2, z * 0.75, z * 0.4, z * 0.22);
-  ctx.restore();
+  ctx.fillStyle = '#8a7040'; ctx.fillRect(-z * 0.45, -z * 1.55 + bobY, z * 0.9, z * 1.7);
+  ctx.fillStyle = '#3a2a10'; ctx.fillRect(-z * 0.48, -z * 0.55 + bobY, z * 0.96, z * 0.2);
+  ctx.fillStyle = '#c0a050'; ctx.fillRect(-z * 0.1, -z * 0.58 + bobY, z * 0.2, z * 0.26);
 
-  // Body / tunic
-  ctx.fillStyle = '#8a7040';
-  ctx.fillRect(-z * 0.45, -z * 1.55 + bobY, z * 0.9, z * 1.7);
+  ctx.save(); ctx.translate(-z * 0.52, -z * 1.2 + bobY); ctx.rotate(walkCycle * 0.6);
+  ctx.fillStyle = '#7a6038'; ctx.fillRect(-z * 0.15, 0, z * 0.3, z * 0.75); ctx.restore();
+  ctx.save(); ctx.translate(z * 0.52, -z * 1.2 + bobY); ctx.rotate(-walkCycle * 0.6);
+  ctx.fillStyle = '#8a7040'; ctx.fillRect(-z * 0.15, 0, z * 0.3, z * 0.75); ctx.restore();
 
-  // Belt
-  ctx.fillStyle = '#3a2a10';
-  ctx.fillRect(-z * 0.48, -z * 0.55 + bobY, z * 0.96, z * 0.2);
-  // Belt buckle
-  ctx.fillStyle = '#c0a050';
-  ctx.fillRect(-z * 0.1, -z * 0.58 + bobY, z * 0.2, z * 0.26);
-
-  // Back arm
-  ctx.save();
-  ctx.translate(-z * 0.52, -z * 1.2 + bobY);
-  ctx.rotate(walkCycle * 0.6);
-  ctx.fillStyle = '#7a6038';
-  ctx.fillRect(-z * 0.15, 0, z * 0.3, z * 0.75);
-  ctx.restore();
-
-  // Front arm (sword hand — slightly raised if weapon active)
-  ctx.save();
-  ctx.translate(z * 0.52, -z * 1.2 + bobY);
-  ctx.rotate(-walkCycle * 0.6);
-  ctx.fillStyle = '#8a7040';
-  ctx.fillRect(-z * 0.15, 0, z * 0.3, z * 0.75);
-  ctx.restore();
-
-  // Neck
-  ctx.fillStyle = '#c8a878';
-  ctx.fillRect(-z * 0.18, -z * 1.75 + bobY, z * 0.36, z * 0.22);
-
-  // Head
-  ctx.beginPath();
-  ctx.ellipse(0, -z * 2.1 + bobY, z * 0.42, z * 0.45, 0, 0, Math.PI * 2);
-  ctx.fillStyle = '#c8a878';
-  ctx.fill();
-
-  // Hair
-  ctx.beginPath();
-  ctx.ellipse(0, -z * 2.35 + bobY, z * 0.44, z * 0.28, 0, 0, Math.PI);
-  ctx.fillStyle = '#5a3a18';
-  ctx.fill();
-
-  // Face (only when facing camera — down or left/right)
+  ctx.fillStyle = '#c8a878'; ctx.fillRect(-z * 0.18, -z * 1.75 + bobY, z * 0.36, z * 0.22);
+  ctx.beginPath(); ctx.ellipse(0, -z * 2.1 + bobY, z * 0.42, z * 0.45, 0, 0, Math.PI * 2); ctx.fillStyle = '#c8a878'; ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, -z * 2.35 + bobY, z * 0.44, z * 0.28, 0, 0, Math.PI); ctx.fillStyle = '#5a3a18'; ctx.fill();
   if (dir !== 'up') {
-    // Eyes
     ctx.fillStyle = '#1a0a00';
-    ctx.beginPath();
-    ctx.arc(-z * 0.14, -z * 2.1 + bobY, z * 0.07, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(z * 0.14, -z * 2.1 + bobY, z * 0.07, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(-z * 0.14, -z * 2.1 + bobY, z * 0.07, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(z * 0.14, -z * 2.1 + bobY, z * 0.07, 0, Math.PI * 2); ctx.fill();
   }
-
-  // Hood / hat for certain directions
   if (dir === 'up' || dir === 'down') {
-    ctx.beginPath();
-    ctx.ellipse(0, -z * 2.35 + bobY, z * 0.5, z * 0.18, 0, 0, Math.PI * 2);
-    ctx.fillStyle = '#4a3820';
-    ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, -z * 2.35 + bobY, z * 0.5, z * 0.18, 0, 0, Math.PI * 2); ctx.fillStyle = '#4a3820'; ctx.fill();
   }
-
   ctx.restore();
 
-  // Outer glow ring (player indicator)
   const pulse = 1 + Math.sin(time * 0.003) * 0.15;
-  ctx.beginPath();
-  ctx.arc(sx, sy - zoom * 1.0, zoom * 1.5 * pulse, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(200,170,80,0.25)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  ctx.beginPath(); ctx.arc(sx, sy - zoom * 1.0, zoom * 1.5 * pulse, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(200,170,80,0.25)'; ctx.lineWidth = 1; ctx.stroke();
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
 export default function WorldMap() {
-  const canvasRef    = useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const fogCanvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  // Smooth visual position (lerps toward game tile position each frame)
   const visRef = useRef({ x: 0, y: 0, initialised: false });
-  // Last movement direction for player sprite facing
   const moveDirRef = useRef<MoveDir>('down');
 
-  // Chunk cache: key = chunkY * NUM_CHUNKS_X + chunkX
-  const chunksRef   = useRef<Map<number, HTMLCanvasElement>>(new Map());
-  const seasonRef   = useRef<Season>('thaw');
+  // Chunk canvas cache: key = chunkY * NUM_CHUNKS_X + chunkX
+  const chunksRef = useRef<Map<number, HTMLCanvasElement>>(new Map());
+  const seasonRef = useRef<Season>('thaw');
 
-  // All render state via a single ref — render loop reads from here
   const stateRef = useRef({
     playerX: 0, playerY: 0,
     season: 'thaw' as Season,
+    dayNightPhase: 'day' as string,
     visitedLocations: [] as string[],
     nearestLocation: null as string | null,
     zoom: 7,
     canvasW: 800, canvasH: 600,
   });
 
-  // Pull from Zustand
-  const playerX         = useGameStore(s => s.playerX);
-  const playerY         = useGameStore(s => s.playerY);
-  const season          = useGameStore(s => s.season);
+  const playerX = useGameStore(s => s.playerX);
+  const playerY = useGameStore(s => s.playerY);
+  const season = useGameStore(s => s.season);
+  const dayNightPhase = useGameStore(s => s.dayNightPhase);
   const visitedLocations = useGameStore(s => s.visitedLocations);
-  const nearestLocation  = useGameStore(s => s.nearestLocation);
-  const movePlayer      = useGameStore(s => s.movePlayer);
-  const useItem         = useGameStore(s => s.useItem);
-  const setOverlay      = useGameStore(s => s.setOverlay);
-  const overlay         = useGameStore(s => s.overlay);
+  const nearestLocation = useGameStore(s => s.nearestLocation);
+  const movePlayer = useGameStore(s => s.movePlayer);
+  const useItem = useGameStore(s => s.useItem);
+  const interactEntity = useGameStore(s => s.interactEntity);
+  const setOverlay = useGameStore(s => s.setOverlay);
+  const overlay = useGameStore(s => s.overlay);
+  const phase = useGameStore(s => s.phase);
 
-  // Keep renderRef in sync (no deps on render loop)
   useLayoutEffect(() => {
     const prev = stateRef.current;
     const seasonChanged = prev.season !== season;
-    stateRef.current = { ...prev, playerX, playerY, season, visitedLocations, nearestLocation };
-    if (seasonChanged) chunksRef.current.clear(); // invalidate chunk cache on season change
+    stateRef.current = { ...prev, playerX, playerY, season, dayNightPhase, visitedLocations, nearestLocation };
+    if (seasonChanged) chunksRef.current.clear();
   });
 
-  // Container resize
   useEffect(() => {
     const update = () => {
       if (!containerRef.current) return;
@@ -636,48 +333,44 @@ export default function WorldMap() {
     return () => obs.disconnect();
   }, []);
 
-  // Keyboard input
   useEffect(() => {
     const keysDown = new Set<string>();
-    const MOVE_KEYS = new Set(['w','a','s','d','ArrowUp','ArrowDown','ArrowLeft','ArrowRight']);
+    const MOVE_KEYS = new Set(['w', 'a', 's', 'd', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
     const onDown = (e: KeyboardEvent) => { if (MOVE_KEYS.has(e.key)) { e.preventDefault(); keysDown.add(e.key); } };
-    const onUp   = (e: KeyboardEvent) => keysDown.delete(e.key);
+    const onUp = (e: KeyboardEvent) => keysDown.delete(e.key);
     window.addEventListener('keydown', onDown);
     window.addEventListener('keyup', onUp);
     const iv = setInterval(() => {
       let dx = 0, dy = 0;
-      if (keysDown.has('w') || keysDown.has('ArrowUp'))    dy = -1;
-      if (keysDown.has('s') || keysDown.has('ArrowDown'))  dy =  1;
-      if (keysDown.has('a') || keysDown.has('ArrowLeft'))  dx = -1;
-      if (keysDown.has('d') || keysDown.has('ArrowRight')) dx =  1;
+      if (keysDown.has('w') || keysDown.has('ArrowUp')) dy = -1;
+      if (keysDown.has('s') || keysDown.has('ArrowDown')) dy = 1;
+      if (keysDown.has('a') || keysDown.has('ArrowLeft')) dx = -1;
+      if (keysDown.has('d') || keysDown.has('ArrowRight')) dx = 1;
       if (dx || dy) {
-        // Track facing direction for sprite
-        if      (dy < 0) moveDirRef.current = 'up';
+        if (dy < 0) moveDirRef.current = 'up';
         else if (dy > 0) moveDirRef.current = 'down';
         else if (dx < 0) moveDirRef.current = 'left';
         else if (dx > 0) moveDirRef.current = 'right';
         movePlayer(dx, dy);
       }
-    }, 55); // reduced from 80ms → smoother
+    }, 55);
     return () => { clearInterval(iv); window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp); };
   }, [movePlayer]);
 
-  // E key — use active hotbar item (food)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== 'e' && e.key !== 'E') return;
       if (['INPUT', 'TEXTAREA'].includes((document.activeElement as HTMLElement)?.tagName ?? '')) return;
+      interactEntity();
       useItem();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [useItem]);
+  }, [useItem, interactEntity]);
 
-  // ? key — toggle help overlay
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== '?' && e.key !== 'h' && e.key !== 'H') return;
-      if (e.key === '?') e.shiftKey = true; // ? is Shift+/
       if (['INPUT', 'TEXTAREA'].includes((document.activeElement as HTMLElement)?.tagName ?? '')) return;
       setOverlay(overlay === 'help' ? 'none' : 'help');
     };
@@ -685,7 +378,7 @@ export default function WorldMap() {
     return () => window.removeEventListener('keydown', handler);
   }, [setOverlay, overlay]);
 
-  // Render loop — created once
+  // ── Render loop ──────────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -697,66 +390,69 @@ export default function WorldMap() {
 
       const { playerX, playerY, season, visitedLocations, nearestLocation, zoom, canvasW, canvasH } = stateRef.current;
 
-      // Only resize canvas on dimension mismatch (avoid clearing GPU texture every frame)
       if (canvas!.width !== canvasW || canvas!.height !== canvasH) {
-        canvas!.width  = canvasW;
-        canvas!.height = canvasH;
+        canvas!.width = canvasW; canvas!.height = canvasH;
       }
 
-      // ── Smooth camera: lerp visual position toward tile position ──────
+      // Smooth camera
       if (!visRef.current.initialised) {
-        visRef.current.x = playerX;
-        visRef.current.y = playerY;
-        visRef.current.initialised = true;
+        visRef.current.x = playerX; visRef.current.y = playerY; visRef.current.initialised = true;
       } else {
         const LERP = 0.18;
         visRef.current.x += (playerX - visRef.current.x) * LERP;
         visRef.current.y += (playerY - visRef.current.y) * LERP;
       }
-      const visX = visRef.current.x;
-      const visY = visRef.current.y;
+      const visX = visRef.current.x, visY = visRef.current.y;
 
-      const map = getMap();
       const tilesX = Math.ceil(canvasW / zoom) + 2;
       const tilesY = Math.ceil(canvasH / zoom) + 2;
-      const camX   = visX - tilesX / 2;
-      const camY   = visY - tilesY / 2;
+      const camX = visX - tilesX / 2;
+      const camY = visY - tilesY / 2;
 
-      // Background
       ctx.fillStyle = '#080808';
       ctx.fillRect(0, 0, canvasW, canvasH);
 
-      // ── Draw chunks ────────────────────────────────────────────────────
+      // ── Draw chunks ──────────────────────────────────────────────────
       const chunkStartX = Math.max(0, Math.floor(camX / CHUNK_SIZE));
       const chunkStartY = Math.max(0, Math.floor(camY / CHUNK_SIZE));
-      const chunkEndX   = Math.min(NUM_CHUNKS_X - 1, Math.ceil((camX + tilesX) / CHUNK_SIZE));
-      const chunkEndY   = Math.min(NUM_CHUNKS_Y - 1, Math.ceil((camY + tilesY) / CHUNK_SIZE));
+      const chunkEndX = Math.min(NUM_CHUNKS_X - 1, Math.ceil((camX + tilesX) / CHUNK_SIZE));
+      const chunkEndY = Math.min(NUM_CHUNKS_Y - 1, Math.ceil((camY + tilesY) / CHUNK_SIZE));
 
       ctx.imageSmoothingEnabled = false;
+
+      // Collect visible objects and entities from chunks
+      const visibleObjects: WorldObject[] = [];
+      const visibleEntities: AmbientEntity[] = [];
+
       for (let cy = chunkStartY; cy <= chunkEndY; cy++) {
         for (let cx = chunkStartX; cx <= chunkEndX; cx++) {
           const key = cy * NUM_CHUNKS_X + cx;
           if (!chunksRef.current.has(key)) {
-            chunksRef.current.set(key, bakeChunk(cx, cy, map.tiles, map.roads, season));
+            const chunkData = getChunkData(cx, cy);
+            chunksRef.current.set(key, bakeChunkCanvas(chunkData, season));
           }
-          const chunk = chunksRef.current.get(key)!;
+          const chunkCanvas = chunksRef.current.get(key)!;
           const sx = (cx * CHUNK_SIZE - camX) * zoom;
           const sy = (cy * CHUNK_SIZE - camY) * zoom;
-          ctx.drawImage(chunk, sx, sy, CHUNK_SIZE * zoom, CHUNK_SIZE * zoom);
+          ctx.drawImage(chunkCanvas, sx, sy, CHUNK_SIZE * zoom, CHUNK_SIZE * zoom);
+
+          // Gather objects/entities from this chunk's data
+          const data = getChunkData(cx, cy);
+          visibleObjects.push(...data.objects);
+          visibleEntities.push(...data.entities);
         }
       }
 
-      // ── Water shimmer overlay ──────────────────────────────────────────
+      // Water shimmer
       if (zoom >= 5) {
         const shimAlpha = 0.04 + Math.sin(timestamp * 0.0008) * 0.02;
         ctx.fillStyle = `rgba(40,100,160,${shimAlpha})`;
-        // Only paint over water tiles (rough region check is fine)
         ctx.fillRect(0, 0, canvasW * 0.15, canvasH);
       }
 
-      // ── World objects ──────────────────────────────────────────────────
+      // ── World objects ────────────────────────────────────────────────
       if (zoom >= 4) {
-        for (const obj of map.objects) {
+        for (const obj of visibleObjects) {
           const sx = (obj.x - camX) * zoom;
           const sy = (obj.y - camY) * zoom;
           if (sx < -zoom * 4 || sx > canvasW + zoom * 4 || sy < -zoom * 4 || sy > canvasH + zoom * 4) continue;
@@ -764,9 +460,9 @@ export default function WorldMap() {
         }
       }
 
-      // ── Ambient entities ───────────────────────────────────────────────
+      // ── Ambient entities ─────────────────────────────────────────────
       if (zoom >= 4) {
-        for (const entity of map.entities) {
+        for (const entity of visibleEntities) {
           const t = timestamp * 0.001;
           const animX = entity.x + Math.sin(t * entity.speed + entity.phase) * entity.radius;
           const animY = entity.y + Math.cos(t * entity.speed * 0.71 + entity.phase + 0.5) * entity.radius * 0.6;
@@ -777,10 +473,8 @@ export default function WorldMap() {
         }
       }
 
-      // ── Fog of war ─────────────────────────────────────────────────────
-      if (!fogCanvasRef.current) {
-        fogCanvasRef.current = document.createElement('canvas');
-      }
+      // ── Fog of war ───────────────────────────────────────────────────
+      if (!fogCanvasRef.current) fogCanvasRef.current = document.createElement('canvas');
       const fog = fogCanvasRef.current;
       if (fog.width !== canvasW || fog.height !== canvasH) { fog.width = canvasW; fog.height = canvasH; }
       const fogCtx = fog.getContext('2d')!;
@@ -793,15 +487,12 @@ export default function WorldMap() {
       const playerSY = (playerY - camY) * zoom;
       const addReveal = (lx: number, ly: number, inner: number, outer: number) => {
         const g = fogCtx.createRadialGradient(lx, ly, 0, lx, ly, outer * zoom);
-        g.addColorStop(0,             'rgba(0,0,0,1.0)');
+        g.addColorStop(0, 'rgba(0,0,0,1.0)');
         g.addColorStop(inner / outer, 'rgba(0,0,0,0.85)');
-        g.addColorStop(1,             'rgba(0,0,0,0)');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
         fogCtx.fillStyle = g;
-        fogCtx.beginPath();
-        fogCtx.arc(lx, ly, outer * zoom, 0, Math.PI * 2);
-        fogCtx.fill();
+        fogCtx.beginPath(); fogCtx.arc(lx, ly, outer * zoom, 0, Math.PI * 2); fogCtx.fill();
       };
-
       addReveal(playerSX, playerSY, 60, 110);
       for (const locId of visitedLocations) {
         const coord = LOCATION_COORDS[locId];
@@ -810,11 +501,10 @@ export default function WorldMap() {
         const lsy = (coord.y - camY) * zoom;
         addReveal(lsx, lsy, 80, 160);
       }
-
       fogCtx.globalCompositeOperation = 'source-over';
       ctx.drawImage(fog, 0, 0);
 
-      // ── Location markers ───────────────────────────────────────────────
+      // ── Location markers ─────────────────────────────────────────────
       for (const loc of LOCATIONS) {
         const coord = LOCATION_COORDS[loc.id];
         if (!coord) continue;
@@ -822,30 +512,23 @@ export default function WorldMap() {
         const lsy = (coord.y - camY) * zoom;
         if (lsx < -50 || lsx > canvasW + 50 || lsy < -50 || lsy > canvasH + 50) continue;
 
-        const isNear    = nearestLocation === loc.id;
+        const isNear = nearestLocation === loc.id;
         const isVisited = visitedLocations.includes(loc.id);
-        const markerR   = isNear ? 14 : 9;
+        const markerR = isNear ? 14 : 9;
 
-        // Pulse ring for nearest location
         if (isNear) {
           const pulse = 1 + Math.sin(timestamp * 0.004) * 0.25;
-          ctx.beginPath();
-          ctx.arc(lsx, lsy, markerR * pulse * 1.6, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(200,170,80,0.12)';
-          ctx.fill();
+          ctx.beginPath(); ctx.arc(lsx, lsy, markerR * pulse * 1.6, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(200,170,80,0.12)'; ctx.fill();
         }
-
-        ctx.beginPath();
-        ctx.arc(lsx, lsy, markerR, 0, Math.PI * 2);
+        ctx.beginPath(); ctx.arc(lsx, lsy, markerR, 0, Math.PI * 2);
         ctx.fillStyle = isNear ? 'rgba(200,170,80,0.95)' : isVisited ? 'rgba(160,140,80,0.65)' : 'rgba(80,80,80,0.4)';
         ctx.fill();
         ctx.strokeStyle = isNear ? '#c8aa50' : isVisited ? '#a08c50' : '#555';
-        ctx.lineWidth = isNear ? 2 : 1;
-        ctx.stroke();
+        ctx.lineWidth = isNear ? 2 : 1; ctx.stroke();
 
         ctx.font = `${isNear ? 17 : 13}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(LOC_ICONS[loc.id] ?? '📍', lsx, lsy);
 
         if (isNear || isVisited || zoom > 5) {
@@ -856,55 +539,52 @@ export default function WorldMap() {
         }
       }
 
-      // ── Player (human sprite) ──────────────────────────────────────────
-      // Visual pos is already the camera centre; sprite drawn there
+      // ── Player sprite ────────────────────────────────────────────────
       const psx = (visX - camX) * zoom;
       const psy = (visY - camY) * zoom;
       drawHumanPlayer(ctx, psx, psy, zoom, moveDirRef.current, timestamp);
 
-      // ── Off-screen compass indicators ──────────────────────────────────
+      // ── Off-screen compass indicators ────────────────────────────────
       for (const loc of LOCATIONS) {
         const coord = LOCATION_COORDS[loc.id];
         if (!coord) continue;
         const lsx = (coord.x - camX) * zoom;
         const lsy = (coord.y - camY) * zoom;
         const dist = Math.sqrt((coord.x - playerX) ** 2 + (coord.y - playerY) ** 2);
-        if (dist > 300 || dist < 25) continue;
+        if (dist > 500 || dist < 25) continue;
         if (lsx > 30 && lsx < canvasW - 30 && lsy > 30 && lsy < canvasH - 30) continue;
 
         const angle = Math.atan2(coord.y - visY, coord.x - visX);
         const edgeX = Math.max(24, Math.min(canvasW - 24, psx + Math.cos(angle) * (canvasW / 2 - 35)));
         const edgeY = Math.max(24, Math.min(canvasH - 24, psy + Math.sin(angle) * (canvasH / 2 - 35)));
 
-        ctx.save();
-        ctx.translate(edgeX, edgeY);
-        ctx.rotate(angle);
-        ctx.beginPath();
-        ctx.moveTo(9, 0); ctx.lineTo(-5, -5); ctx.lineTo(-5, 5);
-        ctx.closePath();
+        ctx.save(); ctx.translate(edgeX, edgeY); ctx.rotate(angle);
+        ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(-5, -5); ctx.lineTo(-5, 5); ctx.closePath();
         ctx.fillStyle = visitedLocations.includes(loc.id) ? 'rgba(200,170,80,0.7)' : 'rgba(140,140,140,0.4)';
-        ctx.fill();
-        ctx.restore();
+        ctx.fill(); ctx.restore();
 
         ctx.font = '8px "Courier Prime", monospace';
-        ctx.fillStyle = 'rgba(200,170,80,0.55)';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
+        ctx.fillStyle = 'rgba(200,170,80,0.55)'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
         ctx.fillText(`${loc.name} (${Math.round(dist)})`, edgeX, edgeY + 13);
       }
 
-      // ── Vignette ───────────────────────────────────────────────────────
-      const vig = ctx.createRadialGradient(canvasW / 2, canvasH / 2, canvasH * 0.3, canvasW / 2, canvasH / 2, canvasH * 0.85);
-      vig.addColorStop(0, 'rgba(0,0,0,0)');
-      vig.addColorStop(1, 'rgba(0,0,0,0.55)');
-      ctx.fillStyle = vig;
-      ctx.fillRect(0, 0, canvasW, canvasH);
+      // ── Day/night tint ─────────────────────────────────────────────
+      const dayNight = stateRef.current.dayNightPhase;
+      if (dayNight === 'night') {
+        ctx.fillStyle = 'rgba(10,10,40,0.35)'; ctx.fillRect(0, 0, canvasW, canvasH);
+      } else if (dayNight === 'dusk') {
+        ctx.fillStyle = 'rgba(200,100,50,0.12)'; ctx.fillRect(0, 0, canvasW, canvasH);
+      } else if (dayNight === 'dawn') {
+        ctx.fillStyle = 'rgba(255,200,140,0.08)'; ctx.fillRect(0, 0, canvasW, canvasH);
+      }
 
-      // ── HUD zoom indicator ─────────────────────────────────────────────
+      // ── Vignette ─────────────────────────────────────────────────────
+      const vig = ctx.createRadialGradient(canvasW / 2, canvasH / 2, canvasH * 0.3, canvasW / 2, canvasH / 2, canvasH * 0.85);
+      vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,0.55)');
+      ctx.fillStyle = vig; ctx.fillRect(0, 0, canvasW, canvasH);
+
       ctx.font = '10px "Courier Prime", monospace';
-      ctx.fillStyle = 'rgba(200,185,140,0.4)';
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'top';
+      ctx.fillStyle = 'rgba(200,185,140,0.4)'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
       ctx.fillText(`${zoom.toFixed(1)}×`, canvasW - 10, 10);
 
       animId = requestAnimationFrame(render);
@@ -912,11 +592,11 @@ export default function WorldMap() {
 
     animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, []); // empty — render loop lives forever, reads from stateRef
+  }, []);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
-    stateRef.current.zoom = Math.max(3, Math.min(18, stateRef.current.zoom + (e.deltaY > 0 ? -0.6 : 0.6)));
+    stateRef.current.zoom = Math.max(2, Math.min(20, stateRef.current.zoom + (e.deltaY > 0 ? -0.6 : 0.6)));
   }, []);
 
   return (

@@ -8,6 +8,16 @@ import EventPopup from '@/components/game/EventPopup';
 import OverlayPanel from '@/components/game/OverlayPanel';
 import Hotbar from '@/components/game/Hotbar';
 import HelpPanel from '@/components/game/HelpPanel';
+import InventoryPanel from '@/components/game/InventoryPanel';
+import CraftingPanel from '@/components/game/CraftingPanel';
+import SkillPanel from '@/components/game/SkillPanel';
+import ShopPanel from '@/components/game/ShopPanel';
+import FactionPanel from '@/components/game/FactionPanel';
+import QuestLog from '@/components/game/QuestLog';
+import DungeonView from '@/components/game/DungeonView';
+import SaveLoadPanel from '@/components/game/SaveLoadPanel';
+import Minimap from '@/components/game/Minimap';
+import BuildPanel from '@/components/game/BuildPanel';
 
 export default function GameScreen() {
   const [showConfirm, setShowConfirm] = useState(false);
@@ -21,12 +31,27 @@ export default function GameScreen() {
 
   return (
     <div className="relative w-full h-full overflow-hidden">
-      <WorldMap />
+      {phase === 'dungeon' ? (
+        <DungeonView />
+      ) : (
+        <>
+          <WorldMap />
+          <Minimap />
+        </>
+      )}
       <Hotbar />
       <EventPopup />
       <HudBar />
       <OverlayPanel />
       <HelpPanel />
+      <InventoryPanel />
+      <CraftingPanel />
+      <SkillPanel />
+      <ShopPanel />
+      <FactionPanel />
+      <QuestLog />
+      <SaveLoadPanel />
+      <BuildPanel />
 
       {/* Death Screen */}
       <AnimatePresence>

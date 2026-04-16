@@ -6,21 +6,21 @@ export default function HelpPanel() {
   const setOverlay = useGameStore(s => s.setOverlay);
 
   const keybinds = [
-    // Movement
     { key: 'W/↑', desc: 'Move Up', alt: 'Also: Arrow keys' },
     { key: 'A/←', desc: 'Move Left', alt: 'Also: Arrow keys' },
     { key: 'S/↓', desc: 'Move Down', alt: 'Also: Arrow keys' },
     { key: 'D/→', desc: 'Move Right', alt: 'Also: Arrow keys' },
-    { key: 'E', desc: 'Eat Food', alt: 'Consumes active hotbar item' },
-
-    // Inventory
+    { key: 'E', desc: 'Interact / Eat', alt: 'Board boats, enter caves, eat food' },
+    { key: 'J', desc: 'Attack', alt: 'Melee attack in facing direction' },
     { key: '1–6', desc: 'Select Slot', alt: 'Hotbar slot (left side)' },
-
-    // Overlays
-    { key: 'P', desc: 'Player Panel', alt: 'View stats & factions' },
+    { key: 'I', desc: 'Inventory', alt: 'Backpack & equipment' },
+    { key: 'K', desc: 'Crafting', alt: 'Recipe list' },
+    { key: 'L', desc: 'Skills', alt: 'Skill trees & perks' },
+    { key: 'Q', desc: 'Quests', alt: 'Quest log' },
+    { key: 'F', desc: 'Factions', alt: 'Kingdom standings' },
+    { key: 'P', desc: 'Player Panel', alt: 'View stats & reputation' },
     { key: 'C', desc: 'Chronicle', alt: 'Event history log' },
-
-    // Help
+    { key: 'F5', desc: 'Save/Load', alt: 'Save or load game' },
     { key: '? / H', desc: 'Help Panel', alt: 'This menu' },
     { key: 'ESC', desc: 'Close Panel', alt: 'Dismiss overlays' },
   ];

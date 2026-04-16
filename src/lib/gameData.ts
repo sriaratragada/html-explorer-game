@@ -52,17 +52,46 @@ export const ENVIRONMENT_ACTIONS: EnvironmentAction[] = [
 ];
 
 export const LOCATIONS: Location[] = [
-  { id: 'ashenford', name: 'Ashenford', type: 'village', description: 'A farming village on the fertile plains. Smoke rises from modest chimneys.', biome: 'Fertile Plains', npcs: ['mira', 'aldric'], connections: ['thornwick', 'saltmoor', 'crossroads'], icon: '🏘️' },
-  { id: 'saltmoor', name: 'Saltmoor', type: 'city', description: "A coastal trade city where salt air mingles with the smell of coin.", biome: 'Coastal Region', npcs: ['guildmaster_renn', 'captain_voss'], connections: ['ashenford', 'graygate', 'ironhold'], icon: '🏙️' },
-  { id: 'ironhold', name: 'Ironhold', type: 'fortress', description: "A mountain fortress carved from living rock. The Iron Compact's stronghold.", biome: 'Mountain Range', npcs: ['lord_vane', 'sergeant_kael'], connections: ['saltmoor', 'coldpeak', 'crossroads'], icon: '🏰' },
-  { id: 'thornwick', name: 'Thornwick', type: 'village', description: 'Deep forest village where the Greenwarden Covenant holds quiet sway.', biome: 'Dense Forest', npcs: ['elder_saya', 'fen_the_hunter'], connections: ['ashenford', 'marshend', 'ruins_of_aether'], icon: '🌲' },
-  { id: 'graygate', name: 'Graygate', type: 'city', description: 'A crossroads city where every faction maintains a presence. The neutral ground.', biome: 'Fertile Plains', npcs: ['broker_lysara', 'watchman_pike'], connections: ['saltmoor', 'dustfall', 'crossroads'], icon: '🏛️' },
-  { id: 'dustfall', name: 'Dustfall', type: 'ruins', description: 'The largest ruin complex in Aethermoor. Something hums beneath the stone.', biome: 'Ancient Ruins', npcs: ['archivist_nol', 'the_whisperer'], connections: ['graygate', 'badlands'], icon: '🗿' },
-  { id: 'crossroads', name: 'The Crossroads Inn', type: 'village', description: 'A sprawling inn at the junction of three trade roads.', biome: 'Fertile Plains', npcs: ['innkeeper_bryn'], connections: ['ashenford', 'ironhold', 'graygate'], icon: '🍺' },
-  { id: 'marshend', name: 'Marshend', type: 'village', description: 'A village built on stilts above the marshwater. The Ashen Brotherhood operates here.', biome: 'Dense Forest', npcs: ['shadow_maren'], connections: ['thornwick', 'badlands'], icon: '🌿' },
-  { id: 'badlands', name: 'The Badlands', type: 'wilderness', description: 'Cracked earth stretches to the horizon. Something worse moves in the deep ravines.', biome: 'Badlands', npcs: [], connections: ['dustfall', 'marshend'], icon: '💀' },
-  { id: 'coldpeak', name: 'Coldpeak', type: 'fortress', description: 'The highest settlement in Aethermoor. The Scholarium maintains an observatory here.', biome: 'Mountain Range', npcs: ['astronomer_vael'], connections: ['ironhold'], icon: '⛰️' },
-  { id: 'ruins_of_aether', name: 'Ruins of the Aetherik Temple', type: 'ruins', description: 'The central temple of the old empire. The Arcanist path begins here.', biome: 'Ancient Ruins', npcs: [], connections: ['thornwick'], icon: '✨' },
+  // ── Auredia (Grand Kingdom) ──
+  { id: 'highmarch', name: 'Highmarch', type: 'city', description: 'The capital of Auredia. A walled city of stone and banners at the crossroads of the kingdom\'s greatest roads.', biome: 'Fertile Plains', npcs: [], connections: ['ashenford', 'millhaven', 'graygate', 'brightwater'], icon: '👑' },
+  { id: 'ashenford', name: 'Ashenford', type: 'village', description: 'A farming village on the fertile plains. Smoke rises from modest chimneys.', biome: 'Fertile Plains', npcs: ['mira', 'aldric'], connections: ['crossroads', 'saltmoor', 'highmarch'], icon: '🏘️' },
+  { id: 'saltmoor', name: 'Saltmoor', type: 'port', description: 'A coastal trade city where salt air mingles with the smell of coin.', biome: 'Coastal Region', npcs: ['guildmaster_renn', 'captain_voss'], connections: ['ashenford', 'graygate', 'oakshire'], icon: '🏙️' },
+  { id: 'ironhold', name: 'Ironhold', type: 'fortress', description: 'A mountain fortress carved from living rock. The Iron Compact\'s stronghold.', biome: 'Mountain Range', npcs: ['lord_vane', 'sergeant_kael'], connections: ['crossroads', 'coldpeak', 'brightwater'], icon: '🏰' },
+  { id: 'thornwick', name: 'Thornwick', type: 'village', description: 'Deep forest village where the Greenwarden Covenant holds quiet sway.', biome: 'Dense Forest', npcs: ['elder_saya', 'fen_the_hunter'], connections: ['graygate', 'goldcrest'], icon: '🌲' },
+  { id: 'graygate', name: 'Graygate', type: 'city', description: 'A crossroads city where every faction maintains a presence. The neutral ground.', biome: 'Fertile Plains', npcs: ['broker_lysara', 'watchman_pike'], connections: ['saltmoor', 'oakshire', 'goldcrest', 'highmarch', 'thornwick'], icon: '🏛️' },
+  { id: 'crossroads', name: 'The Crossroads Inn', type: 'village', description: 'A sprawling inn at the junction of three trade roads.', biome: 'Fertile Plains', npcs: ['innkeeper_bryn'], connections: ['ashenford', 'ironhold', 'millhaven', 'coldpeak'], icon: '🍺' },
+  { id: 'coldpeak', name: 'Coldpeak', type: 'fortress', description: 'The highest settlement in Auredia. The Scholarium maintains an observatory here.', biome: 'Mountain Range', npcs: ['astronomer_vael'], connections: ['ironhold', 'crossroads'], icon: '⛰️' },
+  { id: 'millhaven', name: 'Millhaven', type: 'village', description: 'A quiet village beside a mill-stream. Known for its honey-mead and thatched roofs.', biome: 'Fertile Plains', npcs: [], connections: ['highmarch', 'crossroads', 'brightwater'], icon: '🏡' },
+  { id: 'brightwater', name: 'Brightwater', type: 'village', description: 'A small lakeside town whose clear waters attract scholars and fishermen alike.', biome: 'Fertile Plains', npcs: [], connections: ['highmarch', 'ironhold', 'millhaven'], icon: '💧' },
+  { id: 'oakshire', name: 'Oakshire', type: 'village', description: 'A southern woodland village. Ancient oaks line every path.', biome: 'Forest', npcs: [], connections: ['saltmoor', 'graygate'], icon: '🌳' },
+  { id: 'goldcrest', name: 'Goldcrest', type: 'fortress', description: 'A vassal castle overlooking the Auredia heartland. House Valdric flies its banner here.', biome: 'Hills', npcs: [], connections: ['thornwick', 'graygate'], icon: '🏰' },
+
+  // ── Trivalen — Korrath ──
+  { id: 'korrath_citadel', name: 'Korrath Citadel', type: 'fortress', description: 'The seat of Warlord-King Thane Rusk, carved into the mountain face. Iron banners fly from every tower.', biome: 'Mountain Range', npcs: [], connections: ['frostmarch', 'deepmine', 'dustfall'], icon: '⚔️' },
+  { id: 'frostmarch', name: 'Frostmarch', type: 'fortress', description: 'A northern fortress half-buried in permanent snow. Korrath\'s first line of defence.', biome: 'Mountain Range', npcs: [], connections: ['korrath_citadel', 'deepmine'], icon: '🏔️' },
+  { id: 'deepmine', name: 'Deepmine', type: 'village', description: 'A mining settlement where iron ore is pulled from the mountain\'s heart day and night.', biome: 'Mountain Range', npcs: [], connections: ['korrath_citadel', 'frostmarch'], icon: '⛏️' },
+
+  // ── Trivalen — Vell ──
+  { id: 'vell_harbor', name: 'Vell Harbor', type: 'port', description: 'Queen Serala\'s capital. A crescent harbour lined with warehouses, taverns, and the Merchant Court.', biome: 'Coastal Region', npcs: [], connections: ['sunfield', 'coral_cove', 'badlands'], icon: '⚓' },
+  { id: 'sunfield', name: 'Sunfield', type: 'village', description: 'Golden wheat stretches to the horizon. Vell\'s breadbasket.', biome: 'Fertile Plains', npcs: [], connections: ['vell_harbor', 'badlands', 'marshend'], icon: '🌾' },
+  { id: 'coral_cove', name: 'Coral Cove', type: 'port', description: 'A smuggler\'s harbour on Vell\'s western shore. What the crown doesn\'t see, the cove provides.', biome: 'Coastal Region', npcs: [], connections: ['vell_harbor'], icon: '🐚' },
+
+  // ── Trivalen — Sarnak ──
+  { id: 'sarnak_hold', name: 'Sarnak Hold', type: 'fortress', description: 'The Khan\'s seat: a fortress of felt and stone on the open steppe. Horse-herds surround it for miles.', biome: 'Steppe', npcs: [], connections: ['windridge', 'dustplain'], icon: '🐎' },
+  { id: 'windridge', name: 'Windridge', type: 'fortress', description: 'A ridgetop fort controlling the pass between Korrath and Sarnak territory.', biome: 'Hills', npcs: [], connections: ['sarnak_hold', 'deepmine'], icon: '🌬️' },
+  { id: 'dustplain', name: 'Dustplain', type: 'village', description: 'A dry steppe settlement of horsemen and herders. The trade road south begins here.', biome: 'Steppe', npcs: [], connections: ['sarnak_hold', 'dustfall'], icon: '🏜️' },
+
+  // ── Trivalen — Contested ──
+  { id: 'dustfall', name: 'Dustfall', type: 'ruins', description: 'The largest ruin complex in Trivalen. Something hums beneath the stone. Three kingdoms claim it; none hold it.', biome: 'Ancient Ruins', npcs: ['archivist_nol', 'the_whisperer'], connections: ['korrath_citadel', 'dustplain', 'marshend'], icon: '🗿' },
+  { id: 'marshend', name: 'Marshend', type: 'village', description: 'A village built on stilts above the marshwater. The Ashen Brotherhood operates here, far from any crown.', biome: 'Dense Forest', npcs: ['shadow_maren'], connections: ['dustfall', 'badlands', 'sunfield'], icon: '🌿' },
+  { id: 'badlands', name: 'The Badlands', type: 'wilderness', description: 'Cracked earth stretches to the horizon. The contested ground between Vell and Sarnak, where armies have bled.', biome: 'Badlands', npcs: [], connections: ['vell_harbor', 'marshend', 'sunfield'], icon: '💀' },
+
+  // ── Uloren (Unexplored) ──
+  { id: 'mistwood', name: 'Mistwood', type: 'village', description: 'A fog-bound settlement at the edge of the primeval forest. Its people speak little and watch much.', biome: 'Dense Forest', npcs: [], connections: [], icon: '🌫️' },
+  { id: 'ruins_of_aether', name: 'Ruins of the Aetherik Temple', type: 'ruins', description: 'The central temple of the old empire. The Arcanist path begins here.', biome: 'Ancient Ruins', npcs: [], connections: [], icon: '✨' },
+  { id: 'shadowfen', name: 'Shadowfen', type: 'village', description: 'A swamp village in southern Uloren. Lanterns burn all day — the canopy blocks the sun.', biome: 'Swamp', npcs: [], connections: [], icon: '🕯️' },
+  { id: 'whisper_stones', name: 'Whisper Stones', type: 'ruins', description: 'Standing stones that hum when the wind blows. No one knows who placed them or why.', biome: 'Ancient Ruins', npcs: [], connections: [], icon: '🪨' },
+  { id: 'hollowpeak', name: 'Hollowpeak', type: 'village', description: 'A settlement inside a hollow mountain. Its people mine crystal that glows without fire.', biome: 'Mountain Range', npcs: [], connections: [], icon: '🔮' },
 ];
 
 export const INITIAL_NPCS: Npc[] = [

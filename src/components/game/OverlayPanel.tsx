@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useGameStore } from '@/lib/gameStore';
-import { REP_LABELS, FACTION_INFO, SEASON_NAMES, SEASON_ICONS } from '@/lib/gameData';
+import { REP_LABELS, FACTION_INFO, SEASON_NAMES, SEASON_ICONS, LOCATIONS } from '@/lib/gameData';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function OverlayPanel() {
@@ -14,16 +14,18 @@ export default function OverlayPanel() {
   const chronicle = useGameStore(s => s.chronicle);
   const visitedLocations = useGameStore(s => s.visitedLocations);
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
       if (e.key === 'Escape') setOverlay('none');
       if (e.key === 'p' || e.key === 'P') setOverlay(overlay === 'player' ? 'none' : 'player');
-      if (e.key === 'c' || e.key === 'C') {
-        // Don't trigger if user is typing in an input
-        if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
-        setOverlay(overlay === 'chronicle' ? 'none' : 'chronicle');
-      }
+      if (e.key === 'c' || e.key === 'C') setOverlay(overlay === 'chronicle' ? 'none' : 'chronicle');
+      if (e.key === 'i' || e.key === 'I') setOverlay(overlay === 'inventory' ? 'none' : 'inventory');
+      if (e.key === 'k' || e.key === 'K') setOverlay(overlay === 'crafting' ? 'none' : 'crafting');
+      if (e.key === 'l' || e.key === 'L') setOverlay(overlay === 'skills' ? 'none' : 'skills');
+      if (e.key === 'q' || e.key === 'Q') setOverlay(overlay === 'quests' ? 'none' : 'quests');
+      if (e.key === 'f' || e.key === 'F') setOverlay(overlay === 'faction' ? 'none' : 'faction');
+      if (e.key === 'F5') { e.preventDefault(); setOverlay(overlay === 'saveload' ? 'none' : 'saveload'); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -59,7 +61,7 @@ export default function OverlayPanel() {
                 <div className="text-center mb-8">
                   <h2 className="font-display text-2xl text-gold gold-glow mb-1">{playerTitle}</h2>
                   <p className="font-mono-game text-[10px] text-mist uppercase tracking-widest">
-                    {SEASON_ICONS[season]} {SEASON_NAMES[season]} · Tick {tick} · {visitedLocations.length}/11 discovered
+                    {SEASON_ICONS[season]} {SEASON_NAMES[season]} · Tick {tick} · {visitedLocations.length}/{LOCATIONS.length} discovered
                   </p>
                 </div>
 

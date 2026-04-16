@@ -1,17 +1,14 @@
 import { create } from 'zustand';
-import { GameState, Season, ChronicleEntry, Reputation, FactionStanding, OverlayType, TutorialStep, EnvironmentAction, HotbarItem } from './gameTypes';
+import { GameState, Season, ChronicleEntry, Reputation, FactionStanding, OverlayType, TutorialStep, EnvironmentAction, HotbarItem, DayNightPhase } from './gameTypes';
+import { createWeatherState } from './weatherSystem';
+import { startTicker, stopTicker } from './worldTicker';
 import { INITIAL_NPCS, generateEvents, getWorldEvent, getPlayerTitle, ENVIRONMENT_ACTIONS, FOOD_VALUES } from './gameData';
-import { LOCATION_COORDS, isWalkableCode, generateWorldMap, WorldMap as WorldMapData, MAP_W, MAP_H } from './mapGenerator';
+import { LOCATION_COORDS, isWalkableCode, getTileAt, MAP_W, MAP_H, TILE_NAMES } from './mapGenerator';
+import { initWorldEntities, getEntitiesNear, spawnEntity, removeEntity, moveEntity } from './worldEntities';
 
 const SEASON_ORDER: Season[] = ['thaw', 'summer', 'harvest', 'dark'];
 const TICKS_PER_SEASON = 12;
 const PROXIMITY_RADIUS = 30;
-
-let cachedMap: WorldMapData | null = null;
-export function getMap(): WorldMapData {
-  if (!cachedMap) cachedMap = generateWorldMap();
-  return cachedMap;
-}
 
 function findNearestLocation(px: number, py: number): string | null {
   let nearest: string | null = null;
@@ -61,6 +58,7 @@ interface GameStore extends GameState {
   setOverlay: (o: OverlayType) => void;
   advanceTutorial: () => void;
   performEnvironmentAction: (actionId: string) => void;
+  interactEntity: () => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -72,8 +70,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
   maxHealth: 100,
   hunger: 100,
   tick: 0,
+  worldTime: 0,
+  dayNightPhase: 'day' as DayNightPhase,
+  weather: createWeatherState(),
   season: 'thaw',
   seasonTick: 0,
+  seed: 42,
   reputation: { conquest: 0, trade: 0, craft: 0, diplomacy: 0, exploration: 0, arcane: 0 },
   factions: { amber: 0, iron: 0, green: 0, scholar: 0, ashen: 0, tide: 0 },
   currentLocation: 'ashenford',
@@ -92,8 +94,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   environmentCooldowns: {},
 
   startGame: () => {
-    // Pre-generate map
-    getMap();
+    initWorldEntities();
     const npcs = JSON.parse(JSON.stringify(INITIAL_NPCS));
     const initialChronicle: ChronicleEntry = {
       tick: 0, season: 'thaw',
@@ -107,7 +108,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       health: 100,
       maxHealth: 100,
       hunger: 100,
-      tick: 0, season: 'thaw', seasonTick: 0,
+      tick: 0,
+      worldTime: 14 * 2, // start at noon (hour 14)
+      dayNightPhase: 'day',
+      weather: createWeatherState(),
+      season: 'thaw', seasonTick: 0,
+      seed: 42,
       reputation: { conquest: 0, trade: 0, craft: 0, diplomacy: 0, exploration: 0, arcane: 0 },
       factions: { amber: 0, iron: 0, green: 0, scholar: 0, ashen: 0, tide: 0 },
       currentLocation: 'ashenford',
@@ -127,6 +133,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hotbar: STARTER_HOTBAR,
       activeSlot: 0,
     });
+    startTicker();
   },
 
   setActiveSlot: (slot: number) => set({ activeSlot: slot }),
@@ -157,12 +164,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const state = get();
     if (state.currentEvent || state.lastResult || state.phase === 'dead') return;
     
-    const map = getMap();
     const nx = state.playerX + dx;
     const ny = state.playerY + dy;
     
     if (nx < 0 || nx >= MAP_W || ny < 0 || ny >= MAP_H) return;
-    if (!isWalkableCode(map.tiles[ny * MAP_W + nx])) return;
+    const tileCode = getTileAt(nx, ny);
+    const tileName = TILE_NAMES[tileCode] ?? 'grass';
+    if (state.phase === 'sailing') {
+      // While sailing: water/deep_water/river are walkable, land is not
+      if (tileName !== 'deep_water' && tileName !== 'water' && tileName !== 'river' && tileName !== 'sand') return;
+    } else {
+      if (!isWalkableCode(tileCode)) return;
+    }
 
     const nearest = findNearestLocation(nx, ny);
     const newChronicle: ChronicleEntry[] = [];
@@ -391,5 +404,39 @@ export const useGameStore = create<GameStore>((set, get) => ({
       environmentCooldowns: { ...state.environmentCooldowns, [actionId]: state.tick + action.cooldownTicks },
       playerTitle: getPlayerTitle(newRep as unknown as Record<string, number>),
     });
+  },
+
+  interactEntity: () => {
+    const state = get();
+    const nearby = getEntitiesNear(state.playerX, state.playerY, 3);
+
+    if (state.phase === 'sailing') {
+      // Dismount: find adjacent sand/grass tile
+      const tileCode = getTileAt(state.playerX, state.playerY);
+      const tileName = TILE_NAMES[tileCode] ?? '';
+      if (tileName === 'sand' || tileName === 'water') {
+        // Leave boat entity at current position
+        spawnEntity('boat', state.playerX, state.playerY, { docked: false });
+        const entry: ChronicleEntry = { tick: state.tick, season: state.season, text: 'The traveler stepped ashore and left the boat at the waterline.', type: 'action' };
+        set({ phase: 'playing', chronicle: [...state.chronicle, entry] });
+      }
+      return;
+    }
+
+    // Check for boats
+    const boat = nearby.find(e => e.kind === 'boat');
+    if (boat) {
+      removeEntity(boat.id);
+      const entry: ChronicleEntry = { tick: state.tick, season: state.season, text: 'The traveler boarded a boat and set sail.', type: 'action' };
+      set({ phase: 'sailing', chronicle: [...state.chronicle, entry] });
+      return;
+    }
+
+    // Check for cave entrances (Phase 9 will expand this)
+    const cave = nearby.find(e => e.kind === 'cave_entrance');
+    if (cave) {
+      const entry: ChronicleEntry = { tick: state.tick, season: state.season, text: 'The traveler found a dark cave entrance...', type: 'discovery' };
+      set({ chronicle: [...state.chronicle, entry] });
+    }
   },
 }));
