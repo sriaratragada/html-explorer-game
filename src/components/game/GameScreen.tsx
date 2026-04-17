@@ -20,6 +20,7 @@ import SaveLoadPanel from '@/components/game/SaveLoadPanel';
 import Minimap from '@/components/game/Minimap';
 import BuildPanel from '@/components/game/BuildPanel';
 import FastTravelPanel from '@/components/game/FastTravelPanel';
+import CampStashPanel from '@/components/game/CampStashPanel';
 
 function DialogueOverlay() {
   const activeDialogue = useGameStore(s => s.activeDialogue);
@@ -78,6 +79,7 @@ export default function GameScreen() {
       <SaveLoadPanel />
       <BuildPanel />
       <FastTravelPanel />
+      <CampStashPanel />
       {phase !== 'dungeon' && <DialogueOverlay />}
 
       {/* Death Screen */}

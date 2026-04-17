@@ -7,6 +7,7 @@ import {
   getSettlementMeta,
   type ContinentId,
 } from './mapGenerator';
+import { mergeHamletSpurRoadsIntoChunk, type HamletPoint } from './settlementLayout';
 
 export type HamletArchetype =
   | 'shepherd_camp'
@@ -161,4 +162,10 @@ export function getExtendedLocationCoords(): Record<string, { x: number; y: numb
 
 export function isHamletId(id: string): boolean {
   return id.startsWith('hamlet_');
+}
+
+/** Merge procedural hamlet spur roads into a chunk road bitmask (called from mapGenerator). */
+export function mergeHamletChunkRoads(cx: number, cy: number, roads: Uint8Array): void {
+  const pts: HamletPoint[] = getHamlets().map(h => ({ x: h.x, y: h.y, id: h.id }));
+  mergeHamletSpurRoadsIntoChunk(cx, cy, roads, pts);
 }

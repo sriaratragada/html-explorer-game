@@ -41,7 +41,7 @@ export default function OverlayPanel() {
 
   return (
     <AnimatePresence>
-      {overlay !== 'none' && (
+      {(overlay === 'player' || overlay === 'chronicle') && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

@@ -127,5 +127,24 @@ export function generateDungeon(caveId: number, continent: string): DungeonData 
     enemies.push({ id: `de_${enemyId++}`, kind, x: ex, y: ey, hp, maxHp: hp, vx: 0, vy: 0 });
   }
 
+  // Champion near exit (visual boss; dungeon combat not fully wired — signals depth for rewards)
+  let bx = exitX - 3;
+  let by = exitY;
+  for (let t = 0; t < 12 && tiles[by * DUNGEON_W + bx] !== DT.AIR; t++) {
+    bx -= 1;
+  }
+  if (bx > 2 && tiles[by * DUNGEON_W + bx] === DT.AIR) {
+    enemies.push({
+      id: `de_${enemyId++}`,
+      kind: 'goblin',
+      x: bx,
+      y: by,
+      hp: 120,
+      maxHp: 120,
+      vx: 0,
+      vy: 0,
+    });
+  }
+
   return { tiles, enemies, entranceX, entranceY, exitX, exitY };
 }

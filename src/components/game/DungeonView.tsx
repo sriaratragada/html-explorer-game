@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { generateDungeon, DUNGEON_W, DUNGEON_H, DUNGEON_TILE_NAMES, DungeonData, DungeonEnemy } from '@/lib/dungeonGen';
 import { useGameStore } from '@/lib/gameStore';
 
+function exitDungeon() {
+  useGameStore.getState().finalizeDungeonExit();
+}
+
 const TILE_SIZE = 8;
 const GRAVITY = 0.4;
 const JUMP_FORCE = -6;
@@ -88,7 +92,7 @@ export default function DungeonView() {
 
       // Check exit
       if (tileAt(p.x + 3, p.y + 3) === 'exit') {
-        useGameStore.setState({ phase: 'playing' });
+        exitDungeon();
         return;
       }
 
@@ -142,7 +146,7 @@ export default function DungeonView() {
   useEffect(() => {
     if (phase !== 'dungeon') return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') useGameStore.setState({ phase: 'playing' });
+      if (e.key === 'Escape') exitDungeon();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);

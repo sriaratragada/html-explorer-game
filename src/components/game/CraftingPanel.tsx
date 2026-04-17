@@ -1,8 +1,10 @@
+import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/lib/gameStore';
 import { RECIPES } from '@/lib/recipes';
 import { ITEMS } from '@/lib/items';
 import { canCraft, countItem } from '@/lib/craftingSystem';
+import { getEntitiesNear } from '@/lib/worldEntities';
 
 export default function CraftingPanel() {
   const overlay = useGameStore(s => s.overlay);
@@ -10,6 +12,13 @@ export default function CraftingPanel() {
   const inventory = useGameStore(s => s.inventory);
   const skills = useGameStore(s => s.skills);
   const craftItemAction = useGameStore(s => s.craftItemAction);
+  const playerX = useGameStore(s => s.playerX);
+  const playerY = useGameStore(s => s.playerY);
+
+  const nearCookingFire = useMemo(
+    () => getEntitiesNear(playerX, playerY, 5).some(e => e.kind === 'cooking_fire'),
+    [playerX, playerY],
+  );
 
   if (overlay !== 'crafting') return null;
 
@@ -24,7 +33,7 @@ export default function CraftingPanel() {
           <div className="space-y-2">
             {RECIPES.map(recipe => {
               const outputDef = ITEMS[recipe.output.itemId];
-              const craftable = canCraft(inventory, recipe, skills as any);
+              const craftable = canCraft(inventory, recipe, skills as any, { nearCookingFire });
               return (
                 <div key={recipe.id} className={`border p-3 flex items-center justify-between transition-colors ${craftable ? 'border-gold/20 hover:border-gold/40' : 'border-gold/5 opacity-50'}`}>
                   <div className="flex items-center gap-3">

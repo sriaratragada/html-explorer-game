@@ -1,4 +1,6 @@
-import { CHUNK_SIZE, MAP_W, MAP_H, LOCATION_COORDS, getSettlementMeta, getTileAt, tileCodeToType } from './mapGenerator';
+import { CHUNK_SIZE, MAP_W, MAP_H, LOCATION_COORDS, getSettlementMeta, getTileAt, tileCodeToType, getWorldSeed } from './mapGenerator';
+import { getSettlementSidewalkPositions, getSettlementLayoutCenter } from './settlementLayout';
+import { buildCaravanRuns } from './tradeRoutes';
 import { getHamlets, type HamletArchetype } from './hamlets';
 import { INITIAL_NPCS } from './gameData';
 
@@ -6,7 +8,7 @@ export type EntityKind =
   | 'boat' | 'cave_entrance' | 'resource_tree' | 'resource_rock' | 'resource_iron'
   | 'resource_herb' | 'resource_berry' | 'wolf' | 'bandit' | 'warband'
   | 'deer' | 'bear' | 'caravan' | 'army' | 'horse' | 'sheep' | 'rabbit'
-  | 'settlement_npc' | 'hamlet_npc';
+  | 'settlement_npc' | 'hamlet_npc' | 'cooking_fire';
 
 export interface WorldEntity {
   id: string;
@@ -232,13 +234,18 @@ export function initWorldEntities() {
   for (const npc of INITIAL_NPCS) {
     const coord = LOCATION_COORDS[npc.location];
     if (!coord) continue;
-    const ox = Math.round((hash(npc.id.charCodeAt(0), 501) - 0.5) * 26);
-    const oy = Math.round((hash(npc.id.charCodeAt(1), 502) - 0.5) * 26);
-    spawnEntity('settlement_npc', coord.x + ox, coord.y + oy, {
+    const slots = getSettlementSidewalkPositions(npc.location, 48);
+    const pick =
+      slots.length > 0
+        ? slots[Math.floor(hash(npc.id.charCodeAt(0), 501) * slots.length)]!
+        : { x: coord.x + Math.round((hash(npc.id.charCodeAt(0), 501) - 0.5) * 26), y: coord.y + Math.round((hash(npc.id.charCodeAt(1), 502) - 0.5) * 26) };
+    spawnEntity('settlement_npc', pick.x, pick.y, {
       npcId: npc.id,
       name: npc.name,
       job: jobFromTitle(npc.title),
       locationId: npc.location,
+      homeX: pick.x,
+      homeY: pick.y,
     }, 100);
   }
 
@@ -252,11 +259,33 @@ export function initWorldEntities() {
   };
 
   const forenames = ['Corin', 'Mara', 'Jory', 'Sera', 'Tomas', 'Elka', 'Hen', 'Mira', 'Daveth', 'Ysolde'];
+  const caravanRuns = buildCaravanRuns(getWorldSeed(), 10);
+  for (const run of caravanRuns) {
+    const start = run.waypoints[0];
+    if (!start) continue;
+    spawnEntity(
+      'caravan',
+      start.x,
+      start.y,
+      {
+        waypoints: run.waypoints,
+        legIndex: 1,
+        dir: 1,
+        origin: run.origin,
+        dest: run.dest,
+        cargo: run.cargo,
+      },
+      75,
+    );
+  }
+
   for (const h of getHamlets()) {
     const count = hash(h.x + 9, h.y + 8) > 0.38 ? 2 : 1;
     for (let slot = 0; slot < count; slot++) {
       const name = forenames[Math.floor(hash(h.x + slot * 17, h.y + slot * 19) * forenames.length)]!;
-      spawnEntity('hamlet_npc', h.x + 1 + slot * 2, h.y + slot, {
+      const hx = h.x + 1 + slot * 2;
+      const hy = h.y + slot;
+      spawnEntity('hamlet_npc', hx, hy, {
         hamletId: h.id,
         hamletName: h.displayName,
         archetype: h.archetype,
@@ -264,12 +293,112 @@ export function initWorldEntities() {
         name,
         job: hamletJob(h.archetype),
         slot,
+        homeX: hx,
+        homeY: hy,
+        hamletX: h.x,
+        hamletY: h.y,
       }, 100);
     }
   }
 }
 
 /** Respawn 1–2 wild animals far from the player when population is low (deterministic). */
+export function tickWorldNpcSchedules(dayPhase: import('./gameTypes').DayNightPhase, worldTime: number): void {
+  const h = (a: number, b: number) => {
+    let x = (a * 374761393 + b * 668265263 + worldTime) & 0xffffffff;
+    x = ((x ^ (x >> 13)) * 1274126177) & 0xffffffff;
+    return (x & 0x7fffffff) / 0x7fffffff;
+  };
+  entityById.forEach(e => {
+    if (e.kind !== 'settlement_npc' && e.kind !== 'hamlet_npc') return;
+    const homeX = (e.data.homeX as number) ?? e.x;
+    const homeY = (e.data.homeY as number) ?? e.y;
+    const locId = e.data.locationId as string | undefined;
+    const hamletId = e.data.hamletId as string | undefined;
+    let tx = homeX;
+    let ty = homeY;
+    if (e.kind === 'settlement_npc' && locId) {
+      const hub = getSettlementLayoutCenter(locId);
+      if (dayPhase === 'day' || dayPhase === 'dawn') {
+        const job = String(e.data.job ?? '');
+        const spread = job === 'merchant' || job === 'guard' ? 14 : 10;
+        tx = hub.x + Math.round((h(worldTime, e.x) - 0.5) * spread * 2);
+        ty = hub.y + Math.round((h(worldTime, e.y + 3) - 0.5) * spread * 2);
+      } else {
+        tx = homeX + Math.round((h(e.x, worldTime) - 0.5) * 3);
+        ty = homeY + Math.round((h(e.y, worldTime + 1) - 0.5) * 3);
+      }
+    } else if (e.kind === 'hamlet_npc' && hamletId) {
+      const hx = (e.data.hamletX as number) ?? homeX;
+      const hy = (e.data.hamletY as number) ?? homeY;
+      if (dayPhase === 'day' || dayPhase === 'dawn') {
+        tx = hx + 3 + Math.round((h(worldTime, e.x) - 0.5) * 4);
+        ty = hy + Math.round((h(worldTime, e.y) - 0.5) * 4);
+      } else {
+        tx = homeX;
+        ty = homeY;
+      }
+    }
+    if (Math.abs(tx - e.x) + Math.abs(ty - e.y) > 48) return;
+    const dx = Math.sign(tx - e.x);
+    const dy = Math.sign(ty - e.y);
+    if (dx === 0 && dy === 0) return;
+    const nx = e.x + dx;
+    const ny = e.y + dy;
+    const tn = tileCodeToType(getTileAt(nx, ny));
+    if (tn === 'deep_water' || tn === 'water' || tn === 'mountain') return;
+    moveEntity(e.id, nx, ny);
+  });
+}
+
+export function tickCaravanMovement(): void {
+  entityById.forEach(e => {
+    if (e.kind !== 'caravan') return;
+    const wp = e.data.waypoints as { x: number; y: number }[] | undefined;
+    if (!wp || wp.length < 2) return;
+    let li = (e.data.legIndex as number) ?? 1;
+    let dir = (e.data.dir as number) ?? 1;
+    if (li < 0) {
+      li = 1;
+      dir = 1;
+    }
+    if (li >= wp.length) {
+      li = wp.length - 2;
+      dir = -1;
+    }
+    const target = wp[li];
+    if (!target) return;
+    if (e.x === target.x && e.y === target.y) {
+      li += dir;
+      if (li >= wp.length) {
+        dir = -1;
+        li = Math.max(0, wp.length - 2);
+        e.data.lastArrival = e.data.dest;
+        e.data.pendingDelivery = { locationId: String(e.data.dest ?? ''), cargo: String(e.data.cargo ?? 'cloth') };
+      } else if (li < 0) {
+        dir = 1;
+        li = Math.min(1, wp.length - 1);
+        e.data.lastArrival = e.data.origin;
+        e.data.pendingDelivery = { locationId: String(e.data.origin ?? ''), cargo: String(e.data.cargo ?? 'cloth') };
+      }
+      e.data.legIndex = li;
+      e.data.dir = dir;
+      return;
+    }
+    const dx = Math.sign(target.x - e.x);
+    const dy = Math.sign(target.y - e.y);
+    moveEntity(e.id, e.x + dx, e.y + dy);
+  });
+}
+
+export function getEntitiesByKind(kind: EntityKind): WorldEntity[] {
+  const out: WorldEntity[] = [];
+  entityById.forEach(ent => {
+    if (ent.kind === kind) out.push(ent);
+  });
+  return out;
+}
+
 export function respawnWildlifeFarFrom(px: number, py: number, worldTime: number) {
   if (countWildlifeEntities() >= 38) return;
   const hash = (a: number, b: number) => {

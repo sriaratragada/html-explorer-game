@@ -21,7 +21,16 @@ export function countItem(inv: Inventory, itemId: string): number {
   return count;
 }
 
-export function canCraft(inv: Inventory, recipe: Recipe, skills?: Record<string, { level: number }>): boolean {
+export interface CanCraftContext {
+  nearCookingFire?: boolean;
+}
+
+export function canCraft(
+  inv: Inventory,
+  recipe: Recipe,
+  skills?: Record<string, { level: number }>,
+  ctx?: CanCraftContext,
+): boolean {
   for (const input of recipe.inputs) {
     if (countItem(inv, input.itemId) < input.qty) return false;
   }
@@ -29,6 +38,7 @@ export function canCraft(inv: Inventory, recipe: Recipe, skills?: Record<string,
     const sk = skills[recipe.skillReq.skill];
     if (!sk || sk.level < recipe.skillReq.level) return false;
   }
+  if (recipe.requiresCookingFire && countItem(inv, 'portable_stove') < 1 && !ctx?.nearCookingFire) return false;
   return true;
 }
 

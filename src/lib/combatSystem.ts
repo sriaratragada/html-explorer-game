@@ -19,7 +19,7 @@ export interface CombatResult {
 }
 
 const HUNTABLE_AND_HOSTILE: EntityKind[] = [
-  'wolf', 'bandit', 'warband', 'bear', 'deer', 'sheep', 'rabbit',
+  'wolf', 'bandit', 'warband', 'bear', 'deer', 'sheep', 'rabbit', 'caravan',
 ];
 
 /** Loot when a kill is confirmed (called with kind before entity removal). */
@@ -49,6 +49,15 @@ export function getKillLoot(kind: EntityKind, seed = 0): KillLoot {
           { itemId: 'iron_ore', qty: 1 + Math.floor(r(8) * 2) },
         ],
         gold: 25 + Math.floor(r(9) * 40),
+      };
+    case 'caravan':
+      return {
+        items: [
+          { itemId: 'salt', qty: 2 + Math.floor(r(10) * 4) },
+          { itemId: 'cloth', qty: 1 + Math.floor(r(11) * 3) },
+          { itemId: 'spice', qty: Math.floor(r(12) * 2) },
+        ],
+        gold: 20 + Math.floor(r(13) * 55),
       };
     default:
       return { items: [], gold: 0 };
@@ -114,6 +123,7 @@ function getKillXp(kind: string): number {
     case 'bandit': return 25;
     case 'warband': return 50;
     case 'bear': return 30;
+    case 'caravan': return 18;
     default: return 10;
   }
 }

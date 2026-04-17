@@ -1,5 +1,7 @@
 import { ITEMS } from './items';
 import { LOCATION_COORDS, getSettlementMeta } from './mapGenerator';
+import type { RegionalModifiers } from './regionalState';
+import { getContinentModifierMul } from './regionalState';
 
 export interface MarketItem {
   itemId: string;
@@ -54,16 +56,55 @@ export function getSellPrice(item: MarketItem): number {
   return Math.max(1, Math.floor(getPrice(item) * 0.6));
 }
 
-export function tickMarket(market: Market): Market {
+const CARGO_TO_ITEM: Record<string, string> = {
+  salt: 'salt',
+  silk: 'silk',
+  spice: 'spice',
+  grain: 'bread',
+  iron: 'iron_ingot',
+  cloth: 'cloth',
+  leather: 'leather',
+  wine: 'fish',
+};
+
+export function tickMarket(market: Market, modifiers?: RegionalModifiers): Market {
+  const meta = getSettlementMeta(market.locationId);
+  const { stockMul, priceMul } =
+    meta && modifiers
+      ? getContinentModifierMul(meta.continent, modifiers, meta.kingdom)
+      : { stockMul: 1, priceMul: 1 };
+
   return {
     ...market,
-    items: market.items.map(item => ({
-      ...item,
-      // Restock slowly
-      stock: Math.min(30, item.stock + (Math.random() < 0.3 ? 1 : 0)),
-      // Price drift
-      priceMultiplier: Math.max(0.5, Math.min(2.0, item.priceMultiplier + (Math.random() - 0.5) * 0.05)),
-    })),
+    items: market.items.map(item => {
+      let stockDelta = Math.random() < 0.3 ? 1 : 0;
+      if (item.itemId === 'bread' || item.itemId === 'herb') stockDelta -= modifiers && modifiers.drought > 0.5 ? 1 : 0;
+      if (item.itemId === 'fish' && modifiers && modifiers.stormSeverity > 0.45) stockDelta -= 1;
+      const newStock = Math.max(0, Math.min(30, Math.floor(item.stock * stockMul * 0.02 + item.stock * 0.98) + stockDelta));
+      let pm = item.priceMultiplier + (Math.random() - 0.5) * 0.05;
+      pm *= 0.92 + priceMul * 0.16;
+      if (modifiers) {
+        if (['bread', 'herb'].includes(item.itemId) && modifiers.drought > 0.45) pm *= 1.05 + modifiers.drought * 0.15;
+        if (['salt', 'spice', 'silk'].includes(item.itemId) && modifiers.banditPressure > 0.45) pm *= 1.04 + modifiers.banditPressure * 0.12;
+        if (item.itemId === 'fish' && modifiers.stormSeverity > 0.4) pm *= 1.03 + modifiers.stormSeverity * 0.1;
+      }
+      return {
+        ...item,
+        stock: newStock,
+        priceMultiplier: Math.max(0.5, Math.min(2.4, pm)),
+      };
+    }),
+  };
+}
+
+/** When a caravan reaches a destination, nudge that market's relevant stock. */
+export function applyCaravanDelivery(market: Market, cargo: string): Market {
+  const itemId = CARGO_TO_ITEM[cargo] ?? 'cloth';
+  return {
+    ...market,
+    items: market.items.map(i =>
+      i.itemId === itemId ? { ...i, stock: Math.min(30, i.stock + 2 + Math.floor(Math.random() * 3)) } : i,
+    ),
   };
 }
 

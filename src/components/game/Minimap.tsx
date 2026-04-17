@@ -107,6 +107,8 @@ export default function Minimap() {
       else if (['boat'].includes(ent.kind)) ctx.fillStyle = 'rgba(80,130,200,0.6)';
       else if (['horse'].includes(ent.kind)) ctx.fillStyle = 'rgba(180,140,60,0.6)';
       else if (['caravan'].includes(ent.kind)) ctx.fillStyle = 'rgba(200,180,80,0.6)';
+      else if (ent.kind === 'cooking_fire') ctx.fillStyle = 'rgba(255,120,40,0.65)';
+      else if (ent.kind === 'settlement_npc' || ent.kind === 'hamlet_npc') ctx.fillStyle = 'rgba(200,190,160,0.55)';
       else continue;
       ctx.fillRect(esx - 0.5, esy - 0.5, 1.5, 1.5);
     }

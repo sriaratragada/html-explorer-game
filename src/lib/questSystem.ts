@@ -41,11 +41,27 @@ export function failQuest(quest: Quest): Quest {
 }
 
 // Sample quests generated from world state
-export function generateBountyQuest(targetName: string, targetLocation: string, reward: number): Quest {
+export function generateBountyQuest(
+  targetName: string,
+  targetLocation: string,
+  reward: number,
+  regionalTags: string[] = [],
+): Quest {
+  const tag = regionalTags[0] ?? 'routine';
+  const flavor =
+    tag === 'banditry'
+      ? `Trade roads are hot—bandits cluster near ${targetLocation}. `
+      : tag === 'border_war'
+        ? `Mustering armies draw sellswords; trouble near ${targetLocation}. `
+        : tag === 'drought'
+          ? `Hungry roads make desperate folk—sightings near ${targetLocation}. `
+          : tag === 'storms'
+            ? `Harbor delays push smugglers inland toward ${targetLocation}. `
+            : '';
   return createQuest(
     `bounty_${targetName}_${Date.now()}`,
     `Hunt: ${targetName}`,
-    `A bounty has been posted for ${targetName}, last seen near ${targetLocation}.`,
+    `${flavor}A bounty has been posted for ${targetName}, last seen near ${targetLocation}.`.trim(),
     targetLocation,
     [
       { type: 'goto', description: `Travel to ${targetLocation}`, targetLocation, completed: false },

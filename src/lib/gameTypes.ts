@@ -1,4 +1,5 @@
 import type { Inventory } from './craftingSystem';
+import type { RegionalModifiers } from './regionalState';
 import type { SkillTree } from './skills';
 import type { Market } from './economySystem';
 import type { FactionState } from './factionSystem';
@@ -102,7 +103,7 @@ export interface EnvironmentAction {
   itemReward?: { id: string; name: string; icon: string; quantity: number; type: ItemType; description: string };
 }
 
-export type OverlayType = 'none' | 'player' | 'chronicle' | 'map' | 'help' | 'inventory' | 'crafting' | 'skills' | 'quests' | 'faction' | 'shop' | 'build' | 'saveload' | 'fasttravel';
+export type OverlayType = 'none' | 'player' | 'chronicle' | 'map' | 'help' | 'inventory' | 'crafting' | 'skills' | 'quests' | 'faction' | 'shop' | 'build' | 'saveload' | 'fasttravel' | 'camp';
 
 export type ItemType = 'tool' | 'weapon' | 'resource' | 'food' | 'armor' | 'misc' | 'potion' | 'trade_good';
 
@@ -170,6 +171,19 @@ export interface GameState {
   facingDir: { dx: number; dy: number };
   mounted: MountState;
   activeCaveId: number | null;
+
+  /** Active overworld cave entity id when in dungeon (for rewards / clears). */
+  activeCaveEntityId: string | null;
+  /** Per-cave last cleared worldTime (limits spam farming). */
+  clearedCaves: Record<number, number>;
+  /** In-dungeon run flags (set on enter). */
+  dungeonRun: { caveId: number; bossDefeated: boolean; depthTier: number } | null;
+
+  regionalModifiers: RegionalModifiers;
+  escortCaravanId: string | null;
+
+  campStash: Inventory;
+  activeCampFireId: string | null;
 
   // NPCs & dialogue
   npcs: Npc[];

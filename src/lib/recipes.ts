@@ -5,13 +5,15 @@ export interface Recipe {
   output: { itemId: string; qty: number };
   workbench?: string; // null = can craft anywhere
   skillReq?: { skill: string; level: number };
+  /** Cooked recipes need a campfire entity nearby or a portable stove in inventory. */
+  requiresCookingFire?: boolean;
 }
 
 export const RECIPES: Recipe[] = [
   // ── Basic (no workbench) ──
   { id: 'craft_wooden_club', name: 'Wooden Club', inputs: [{ itemId: 'wood', qty: 3 }], output: { itemId: 'wooden_club', qty: 1 } },
   { id: 'craft_wooden_shield', name: 'Wooden Shield', inputs: [{ itemId: 'wood', qty: 5 }], output: { itemId: 'wooden_shield', qty: 1 } },
-  { id: 'cook_meat', name: 'Cooked Meat', inputs: [{ itemId: 'raw_meat', qty: 1 }], output: { itemId: 'cooked_meat', qty: 1 } },
+  { id: 'cook_meat', name: 'Cooked Meat', inputs: [{ itemId: 'raw_meat', qty: 1 }], output: { itemId: 'cooked_meat', qty: 1 }, requiresCookingFire: true },
   { id: 'craft_fishing_rod', name: 'Fishing Rod', inputs: [{ itemId: 'wood', qty: 2 }], output: { itemId: 'fishing_rod', qty: 1 } },
   { id: 'craft_stew', name: 'Hearty Stew', inputs: [{ itemId: 'cooked_meat', qty: 1 }, { itemId: 'herb', qty: 2 }], output: { itemId: 'stew', qty: 1 } },
   { id: 'craft_bread', name: 'Bread', inputs: [{ itemId: 'herb', qty: 3 }], output: { itemId: 'bread', qty: 2 } },

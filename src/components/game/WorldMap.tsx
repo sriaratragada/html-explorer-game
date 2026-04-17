@@ -528,6 +528,27 @@ export default function WorldMap() {
                 case 'rabbit':
                   ctx.fillStyle = '#d0c8b0'; ctx.beginPath(); ctx.ellipse(0, 0, z * 0.4, z * 0.3, 0, 0, Math.PI * 2); ctx.fill();
                   break;
+                case 'caravan':
+                  ctx.fillStyle = '#6a5040';
+                  ctx.fillRect(-z * 1.4, -z * 0.5, z * 2.8, z * 1.0);
+                  ctx.fillStyle = '#c4a060';
+                  ctx.fillRect(-z * 0.8, -z * 1.1, z * 1.6, z * 0.55);
+                  ctx.fillStyle = '#3a3028';
+                  ctx.fillRect(z * 0.9, -z * 0.35, z * 0.35, z * 0.7);
+                  break;
+                case 'cooking_fire':
+                  ctx.fillStyle = '#5a3a1a';
+                  ctx.beginPath(); ctx.arc(0, z * 0.15, z * 0.9, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = 'rgba(255,140,40,0.85)';
+                  ctx.beginPath(); ctx.arc(0, -z * 0.2, z * 0.45, 0, Math.PI * 2); ctx.fill();
+                  break;
+                case 'settlement_npc':
+                case 'hamlet_npc':
+                  ctx.fillStyle = '#c8a878';
+                  ctx.beginPath(); ctx.arc(0, 0, z * 0.55, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#4a4038';
+                  ctx.fillRect(-z * 0.35, z * 0.1, z * 0.7, z * 0.55);
+                  break;
                 default:
                   if (we.kind.startsWith('resource_')) {
                     ctx.fillStyle = we.kind === 'resource_tree' ? '#3a6a2a' : we.kind === 'resource_rock' ? '#7a7a7a' : we.kind === 'resource_iron' ? '#8a6644' : '#4a8a3a';

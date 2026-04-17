@@ -22,6 +22,8 @@ interface NpcContext {
   npcMemories: string[];
   recentChronicle: string[];
   worldEvents: string[];
+  /** Overworld tile and time-of-day hint for grounded dialogue. */
+  tileSummary?: string;
 }
 
 interface DialogueResponse {
@@ -77,6 +79,8 @@ Current disposition toward the player: ${ctx.npcDisposition > 10 ? 'friendly' : 
 Season: ${ctx.season}, Weather: ${ctx.weather}, Time: ${ctx.dayPhase}
 
 Your memories of the player: ${ctx.npcMemories.length > 0 ? ctx.npcMemories.join('; ') : 'None — first meeting'}
+
+Where you meet: ${ctx.tileSummary ?? 'Along the road nearby'}
 
 Recent world events: ${ctx.worldEvents.slice(-3).join('; ') || 'Nothing notable'}
 

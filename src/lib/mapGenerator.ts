@@ -1,8 +1,26 @@
 import { Season } from './gameTypes';
+import {
+  invalidateSettlementRoadCache,
+  mergeSettlementLocalRoadsIntoChunk,
+  mergeHamletSpurRoadsIntoChunk,
+  getSettlementLayoutCenter,
+  isSettlementLocalRoad,
+  getSettlementSidewalkPositions,
+} from './settlementLayout';
+import { mergeHamletChunkRoads } from './hamlets';
 
 // ── Value noise ────────────────────────────────────────────────────────────
 let SEED = 42;
-export function setSeed(s: number) { SEED = s; chunkCache.clear(); _roadSet = null; }
+export function getWorldSeed(): number {
+  return SEED;
+}
+
+export function setSeed(s: number) {
+  SEED = s;
+  chunkCache.clear();
+  _roadSet = null;
+  invalidateSettlementRoadCache();
+}
 
 function hash(x: number, y: number): number {
   let h = (x * 374761393 + y * 668265263 + SEED) & 0xffffffff;
@@ -146,8 +164,8 @@ export function getSettlementMeta(id: string): SettlementMeta | undefined {
   return s ? { continent: s.continent, kingdom: s.kingdom, type: s.type, biomeCode: s.biomeCode, biomeRadius: s.biomeRadius } : undefined;
 }
 
-// ── Road connections ───────────────────────────────────────────────────────
-const CONNECTIONS: [string, string][] = [
+// ── Road connections (also trade / caravan graph) ─────────────────────────
+export const TRADE_CONNECTIONS: [string, string][] = [
   // Auredia (dense network)
   ['highmarch','ashenford'], ['highmarch','millhaven'], ['highmarch','graygate'], ['highmarch','brightwater'],
   ['ashenford','crossroads'], ['ashenford','saltmoor'],
@@ -273,7 +291,7 @@ function bresenhamLine(x0: number, y0: number, x1: number, y1: number): [number,
 export function ensureRoads(): Set<number> {
   if (_roadSet) return _roadSet;
   _roadSet = new Set<number>();
-  for (const [a, b] of CONNECTIONS) {
+  for (const [a, b] of TRADE_CONNECTIONS) {
     const ca = LOCATION_COORDS[a], cb = LOCATION_COORDS[b];
     if (!ca || !cb) continue;
     for (const [px, py] of bresenhamLine(ca.x, ca.y, cb.x, cb.y)) {
@@ -355,6 +373,11 @@ function computeTile(x: number, y: number): number {
   if (e < 0.40) return m > 0.55 ? T.FOREST : T.GRASS;
   if (e < 0.55) return T.HILL;
   return T.MOUNTAIN;
+}
+
+/** Base terrain without settlement biome override (for layout / walkability probes). */
+export function sampleBaseTerrainCode(x: number, y: number): number {
+  return computeTile(x, y);
 }
 
 // ── Settlement biome influence ─────────────────────────────────────────────
@@ -455,12 +478,14 @@ function generateChunk(cx: number, cy: number): ChunkData {
       if (roadSet.has(wy * MAP_W + wx)) roads[ty * CHUNK_SIZE + tx] = 1;
     }
   }
+  mergeSettlementLocalRoadsIntoChunk(cx, cy, roads);
+  mergeHamletChunkRoads(cx, cy, roads);
 
   // ── Objects ──
   generateChunkObjects(cx, cy, tiles, roads, nearby, objects);
 
   // ── Entities ──
-  generateChunkEntities(cx, cy, tiles, nearby, entities);
+  generateChunkEntities(cx, cy, tiles, roads, nearby, entities);
 
   return { tiles, roads, objects, entities };
 }
@@ -477,7 +502,8 @@ function generateChunkObjects(
 
   for (const [id, s] of nearby) {
     const R = s.biomeRadius;
-    const sc = { x: s.x, y: s.y };
+    const sc = getSettlementLayoutCenter(id);
+    const sidewalks = getSettlementSidewalkPositions(id, Math.min(160, Math.max(24, Math.round(12 + R * 0.55))));
 
     // Wells at every settlement
     if (inChunk(sc.x + 2, sc.y + 2)) out.push({ x: sc.x + 2, y: sc.y + 2, type: 'well', variant: 0 });
@@ -485,11 +511,22 @@ function generateChunkObjects(
     // Huts and fences for villages/towns/capitals
     if (['village', 'town', 'capital', 'inn'].includes(s.type)) {
       const hutN = Math.min(95, Math.max(6, Math.round(6 + R * 0.42)));
+      const walkTiles = sidewalks.filter(p => inChunk(p.x, p.y));
       for (let i = 0; i < hutN; i++) {
-        const ang = hash(i * 9, id.charCodeAt(0)) * Math.PI * 2;
-        const d = Math.max(6, R * 0.12) + hash(i, id.charCodeAt(1)) * R * 0.78;
-        const hx = Math.round(sc.x + Math.cos(ang) * d);
-        const hy = Math.round(sc.y + Math.sin(ang) * d);
+        let hx: number;
+        let hy: number;
+        if (walkTiles.length > 0) {
+          const pick = walkTiles[Math.floor(hash(i * 9, id.charCodeAt(0)) * walkTiles.length)]!;
+          const jx = Math.round((hash(i, id.charCodeAt(1)) - 0.5) * 4);
+          const jy = Math.round((hash(i + 3, id.charCodeAt(2)) - 0.5) * 4);
+          hx = pick.x + jx;
+          hy = pick.y + jy;
+        } else {
+          const ang = hash(i * 9, id.charCodeAt(0)) * Math.PI * 2;
+          const d = Math.max(6, R * 0.12) + hash(i, id.charCodeAt(1)) * R * 0.78;
+          hx = Math.round(sc.x + Math.cos(ang) * d);
+          hy = Math.round(sc.y + Math.sin(ang) * d);
+        }
         if (inChunk(hx, hy)) out.push({ x: hx, y: hy, type: 'hut', variant: i % 4 });
       }
       const fenceN = Math.min(140, Math.max(14, Math.round(14 + R * 0.55)));
@@ -522,11 +559,20 @@ function generateChunkObjects(
     // Market stalls at trade cities/ports
     if (['city', 'port', 'capital'].includes(s.type)) {
       const stallN = Math.min(36, Math.max(5, Math.round(5 + R * 0.22)));
+      const stallWalk = sidewalks.filter(p => inChunk(p.x, p.y) && Math.hypot(p.x - sc.x, p.y - sc.y) < R * 0.5);
       for (let i = 0; i < stallN; i++) {
-        const ang = hash(i * 5, id.charCodeAt(0)) * Math.PI * 2;
-        const d = Math.max(4, R * 0.08) + hash(i * 7, id.charCodeAt(1)) * R * 0.35;
-        const mx = Math.round(sc.x + Math.cos(ang) * d);
-        const my = Math.round(sc.y + Math.sin(ang) * d);
+        let mx: number;
+        let my: number;
+        if (stallWalk.length > 0) {
+          const pick = stallWalk[Math.floor(hash(i * 5, id.charCodeAt(0)) * stallWalk.length)]!;
+          mx = pick.x;
+          my = pick.y;
+        } else {
+          const ang = hash(i * 5, id.charCodeAt(0)) * Math.PI * 2;
+          const d = Math.max(4, R * 0.08) + hash(i * 7, id.charCodeAt(1)) * R * 0.35;
+          mx = Math.round(sc.x + Math.cos(ang) * d);
+          my = Math.round(sc.y + Math.sin(ang) * d);
+        }
         if (inChunk(mx, my)) out.push({ x: mx, y: my, type: 'market_stall', variant: i % 4 });
       }
     }
@@ -612,6 +658,7 @@ function generateChunkObjects(
 function generateChunkEntities(
   cx: number, cy: number,
   tiles: Uint8Array,
+  roads: Uint8Array,
   nearby: [string, typeof SETTLEMENTS[string]][],
   out: AmbientEntity[],
 ) {
@@ -640,13 +687,23 @@ function generateChunkEntities(
   for (const [id, s] of nearby) {
     const inChunk = (x: number, y: number) => x >= ox && x < ox + CHUNK_SIZE && y >= oy && y < oy + CHUNK_SIZE;
     const R = s.biomeRadius;
+    const sc = getSettlementLayoutCenter(id);
 
     if (['village', 'town', 'city', 'capital', 'inn', 'port'].includes(s.type)) {
       const nV = Math.min(55, Math.max(4, Math.round(4 + R * 0.22)));
+      const sw = getSettlementSidewalkPositions(id, nV * 2).filter(p => inChunk(p.x, p.y));
       const spread = R * 0.72;
       for (let i = 0; i < nV; i++) {
-        const vx = s.x + Math.round((hash(i * 3, id.charCodeAt(0)) - 0.5) * spread * 2);
-        const vy = s.y + Math.round((hash(i * 7, id.charCodeAt(1)) - 0.5) * spread * 2);
+        let vx: number;
+        let vy: number;
+        if (sw.length > 0) {
+          const pick = sw[Math.floor(hash(i * 3, id.charCodeAt(0)) * sw.length)]!;
+          vx = pick.x;
+          vy = pick.y;
+        } else {
+          vx = sc.x + Math.round((hash(i * 3, id.charCodeAt(0)) - 0.5) * spread * 2);
+          vy = sc.y + Math.round((hash(i * 7, id.charCodeAt(1)) - 0.5) * spread * 2);
+        }
         if (!inChunk(vx, vy)) continue;
         out.push({
           x: vx, y: vy, type: 'villager',
@@ -661,8 +718,8 @@ function generateChunkEntities(
       const gR = R * 0.22;
       for (let i = 0; i < nG; i++) {
         const ang = (i / nG) * Math.PI * 2;
-        const gx = Math.round(s.x + Math.cos(ang) * gR);
-        const gy = Math.round(s.y + Math.sin(ang) * gR);
+        const gx = Math.round(sc.x + Math.cos(ang) * gR);
+        const gy = Math.round(sc.y + Math.sin(ang) * gR);
         if (!inChunk(gx, gy)) continue;
         out.push({ x: gx, y: gy, type: 'guard', speed: 0.18, phase: ang, radius: 6 });
       }
@@ -674,7 +731,7 @@ function generateChunkEntities(
     for (let tx = 0; tx < CHUNK_SIZE; tx += 8) {
       const wx = ox + tx, wy = oy + ty;
       const localIdx = ty * CHUNK_SIZE + tx;
-      if (tiles[localIdx] === T.ROAD || (wx < MAP_W && wy < MAP_H && ensureRoads().has(wy * MAP_W + wx))) {
+      if (roads[localIdx] === 1 || tiles[localIdx] === T.ROAD || (wx < MAP_W && wy < MAP_H && ensureRoads().has(wy * MAP_W + wx))) {
         if (hash(wx * 101, wy * 103) < 0.005) {
           out.push({
             x: wx, y: wy,
@@ -706,11 +763,12 @@ export function getTileAt(x: number, y: number): number {
   const lx = x - cx * CHUNK_SIZE, ly = y - cy * CHUNK_SIZE;
   const roadSet = ensureRoads();
   if (roadSet.has(y * MAP_W + x)) return T.ROAD;
+  if (isSettlementLocalRoad(x, y)) return T.ROAD;
   return chunk.tiles[ly * CHUNK_SIZE + lx];
 }
 
 export function getRoadAt(x: number, y: number): boolean {
-  return ensureRoads().has(y * MAP_W + x);
+  return ensureRoads().has(y * MAP_W + x) || isSettlementLocalRoad(x, y);
 }
 
 export function isWalkable(tile: TileType): boolean {

@@ -1,11 +1,22 @@
 import { create } from 'zustand';
-import { GameState, Season, ChronicleEntry, Reputation, FactionStanding, OverlayType, TutorialStep, HotbarItem, DayNightPhase, MountState } from './gameTypes';
+import {
+  GameState,
+  Season,
+  ChronicleEntry,
+  Reputation,
+  FactionStanding,
+  OverlayType,
+  TutorialStep,
+  HotbarItem,
+  DayNightPhase,
+  MountState,
+} from './gameTypes';
 import { createWeatherState } from './weatherSystem';
 import { startTicker } from './worldTicker';
 import { INITIAL_NPCS, generateEvents, getWorldEvent, getPlayerTitle, ENVIRONMENT_ACTIONS, FOOD_VALUES, LOCATIONS } from './gameData';
-import { LOCATION_COORDS, isWalkableCode, getTileAt, MAP_W, MAP_H, TILE_NAMES, getContinentAt, getSettlementMeta } from './mapGenerator';
+import { LOCATION_COORDS, isWalkableCode, getTileAt, MAP_W, MAP_H, TILE_NAMES, getContinentAt, getSettlementMeta, setSeed } from './mapGenerator';
 import { getExtendedLocationCoords, isHamletId } from './hamlets';
-import { initWorldEntities, getEntitiesNear, spawnEntity, removeEntity } from './worldEntities';
+import { initWorldEntities, getEntitiesNear, spawnEntity, removeEntity, getEntityById } from './worldEntities';
 import { createInventory, addToInventory, removeFromInventory, equipItem, unequipItem, craft, canCraft, Inventory, getWeaponDamage, getTotalArmor, countItem } from './craftingSystem';
 import { createSkillTree, addXp, selectPerk, SkillTree } from './skills';
 import { ITEMS } from './items';
@@ -14,6 +25,7 @@ import { createMarkets } from './economySystem';
 import { createFactions, FactionState } from './factionSystem';
 import { Quest } from './questSystem';
 import { createBountyBoard, BountyBoard } from './bountyBoard';
+import { createRegionalModifiers } from './regionalState';
 import { createFogMap, revealAroundPlayer, revealLocation, FogMap } from './fogOfWar';
 import { createHousing, purchasePlot, placeFurniture, Housing, PLOT_PRICES } from './housing';
 import { playerAttack } from './combatSystem';
@@ -84,9 +96,25 @@ function makeStarterInventory(): Inventory {
   let inv = createInventory();
   inv = addToInventory(inv, 'waterskin', 1);
   inv = addToInventory(inv, 'bare_hands', 1);
+  inv = addToInventory(inv, 'tent_kit', 1);
   const bh = inv.slots.findIndex(s => s?.itemId === 'bare_hands');
   if (bh >= 0) inv = equipItem(inv, bh);
   return inv;
+}
+
+function playerNearCookingFire(px: number, py: number): boolean {
+  return getEntitiesNear(px, py, 5).some(e => e.kind === 'cooking_fire');
+}
+
+function worldEventsFromRegional(st: GameState): string[] {
+  const m = st.regionalModifiers;
+  const out: string[] = [];
+  if (m.warTension > 0.48) out.push('Border musters and mercenary traffic are up.');
+  if (m.drought > 0.48) out.push('Dry weather pinches grain and well-water.');
+  if (m.banditPressure > 0.48) out.push('Bandits are thick on the trade roads.');
+  if (m.stormSeverity > 0.42) out.push('Storms have slowed coastwise shipping.');
+  if (out.length === 0) out.push('The roads are quiet—too quiet, some say.');
+  return out;
 }
 
 function initBountyBoards(): Record<string, BountyBoard> {
@@ -124,6 +152,10 @@ interface GameStore extends GameState {
   acceptQuest: (quest: Quest) => void;
   purchasePlotAction: (locationId: string) => void;
   setActiveDialogue: (tree: DialogueTree | null) => void;
+  finalizeDungeonExit: () => void;
+  moveFromCampToBackpack: (campSlotIndex: number) => void;
+  moveFromBackpackToCamp: (invSlotIndex: number) => void;
+  setEscortCaravan: (entityId: string | null) => void;
 }
 
 const starterInv = makeStarterInventory();
@@ -159,6 +191,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   facingDir: { dx: 0, dy: 1 },
   mounted: 'none' as MountState,
   activeCaveId: null,
+  activeCaveEntityId: null,
+  clearedCaves: {},
+  dungeonRun: null,
+  regionalModifiers: createRegionalModifiers(),
+  escortCaravanId: null,
+  campStash: createInventory(),
+  activeCampFireId: null,
   npcs: [],
   activeDialogue: null,
   minorNpcState: {},
@@ -176,6 +215,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   environmentCooldowns: {},
 
   startGame: () => {
+    setSeed(42);
     initWorldEntities();
     const npcs = JSON.parse(JSON.stringify(INITIAL_NPCS));
     const inv = makeStarterInventory();
@@ -201,6 +241,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentLocation: 'ashenford', nearestLocation: 'ashenford',
       playerX: LOCATION_COORDS.ashenford.x, playerY: LOCATION_COORDS.ashenford.y,
       facingDir: { dx: 0, dy: 1 }, mounted: 'none', activeCaveId: null,
+      activeCaveEntityId: null, clearedCaves: {}, dungeonRun: null,
+      regionalModifiers: createRegionalModifiers(), escortCaravanId: null,
+      campStash: createInventory(), activeCampFireId: null,
       npcs, activeDialogue: null, minorNpcState: {}, tutorialObjective: 0,
       chronicle: [initialChronicle], currentEvent: null, lastResult: null,
       visitedLocations: ['ashenford'], completedEvents: [],
@@ -234,6 +277,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const newInv = removeFromInventory(state.inventory, slot.itemId, 1);
       const entry: ChronicleEntry = { tick: state.tick, season: state.season, text: `The traveler drank a ${def.name}.`, type: 'action' };
       set({ health: newHealth, hunger: newHunger, inventory: newInv, hotbar: inventoryToHotbar(newInv), chronicle: [...state.chronicle, entry] });
+    } else if (slot.itemId === 'tent_kit') {
+      if (state.activeCampFireId && getEntityById(state.activeCampFireId)) {
+        set({ lastResult: 'You already have a camp pitched.' });
+        return;
+      }
+      const newInv = removeFromInventory(state.inventory, 'tent_kit', 1);
+      const ent = spawnEntity('cooking_fire', state.playerX, state.playerY, { expiresAt: state.worldTime + 900 }, 1);
+      const entry: ChronicleEntry = {
+        tick: state.tick,
+        season: state.season,
+        text: 'A small fire is lit; the camp is ready. Press E on the fire to open your field stash.',
+        type: 'environment',
+      };
+      set({
+        inventory: newInv,
+        hotbar: inventoryToHotbar(newInv),
+        activeCampFireId: ent.id,
+        chronicle: [...state.chronicle, entry],
+        lastResult: null,
+      });
     }
   },
 
@@ -505,7 +568,37 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (cave) {
       const caveId = parseInt(cave.id.split('_').pop() ?? '1') || 1;
       const entry: ChronicleEntry = { tick: state.tick, season: state.season, text: 'The traveler descended into the darkness...', type: 'discovery' };
-      set({ phase: 'dungeon', activeCaveId: caveId, chronicle: [...state.chronicle, entry] });
+      set({
+        phase: 'dungeon',
+        activeCaveId: caveId,
+        activeCaveEntityId: cave.id,
+        dungeonRun: { caveId, bossDefeated: false, depthTier: 1 + (caveId % 4) },
+        chronicle: [...state.chronicle, entry],
+      });
+      return true;
+    }
+
+    const caravan = nearby.find(e => e.kind === 'caravan');
+    if (caravan) {
+      if (state.escortCaravanId === caravan.id) {
+        set({ lastResult: 'You are already escorting this caravan. Stay close when it reaches a yard.' });
+        return true;
+      }
+      set({
+        escortCaravanId: caravan.id,
+        lastResult: 'You fall in with the wagons. Keep within a dozen paces when they reach a market for your fee.',
+        chronicle: [
+          ...state.chronicle,
+          { tick: state.tick, season: state.season, text: 'The traveler offered escort to a merchant train.', type: 'action' },
+        ],
+      });
+      return true;
+    }
+
+    const fire = nearby.find(e => e.kind === 'cooking_fire');
+    if (fire) {
+      if (state.overlay === 'camp') set({ overlay: 'none' });
+      else set({ overlay: 'camp' });
       return true;
     }
 
@@ -560,7 +653,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             npcDisposition: minor.disposition,
             npcMemories: minor.memories,
             recentChronicle: st.chronicle.slice(-5).map(c => c.text),
-            worldEvents: [],
+            worldEvents: worldEventsFromRegional(st),
+            tileSummary: `Overworld tile (${Math.round(st.playerX)}, ${Math.round(st.playerY)}), ${st.dayNightPhase}`,
           });
           if (res) {
             const opts = res.options.map(o => o.text);
@@ -665,7 +759,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   craftItemAction: (recipeId: string) => {
     const state = get();
     const recipe = RECIPES.find(r => r.id === recipeId);
-    if (!recipe || !canCraft(state.inventory, recipe, state.skills as any)) return;
+    const nearFire = playerNearCookingFire(state.playerX, state.playerY);
+    if (!recipe || !canCraft(state.inventory, recipe, state.skills as any, { nearCookingFire: nearFire })) {
+      if (recipe?.requiresCookingFire && countItem(state.inventory, 'portable_stove') < 1 && !nearFire) {
+        set({ lastResult: 'You need a campfire nearby or a portable stove to cook meat.' });
+      }
+      return;
+    }
     const newInv = craft(state.inventory, recipe);
     const newSkills = addXp(state.skills, 'crafting', 10);
     const entry: ChronicleEntry = { tick: state.tick, season: state.season, text: `Crafted ${recipe.name}.`, type: 'action' };
@@ -729,4 +829,74 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   setActiveDialogue: (tree: DialogueTree | null) => set({ activeDialogue: tree }),
+
+  setEscortCaravan: (entityId: string | null) => set({ escortCaravanId: entityId }),
+
+  moveFromCampToBackpack: (campSlotIndex: number) => {
+    const state = get();
+    const slot = state.campStash.slots[campSlotIndex];
+    if (!slot) return;
+    let inv = addToInventory(state.inventory, slot.itemId, slot.qty);
+    const camp = { ...state.campStash, slots: state.campStash.slots.map((s, i) => (i === campSlotIndex ? null : s)) };
+    set({ inventory: inv, hotbar: inventoryToHotbar(inv), campStash: camp });
+  },
+
+  moveFromBackpackToCamp: (invSlotIndex: number) => {
+    const state = get();
+    const slot = state.inventory.slots[invSlotIndex];
+    if (!slot) return;
+    const empty = state.campStash.slots.findIndex(s => s === null);
+    if (empty === -1) {
+      set({ lastResult: 'Camp stash is full.' });
+      return;
+    }
+    const invSlots = state.inventory.slots.map((s, i) => (i === invSlotIndex ? null : s));
+    const inv = { ...state.inventory, slots: invSlots };
+    const campSlots = state.campStash.slots.map(s => (s ? { ...s } : null));
+    campSlots[empty] = { itemId: slot.itemId, qty: slot.qty };
+    set({ inventory: inv, hotbar: inventoryToHotbar(inv), campStash: { ...state.campStash, slots: campSlots } });
+  },
+
+  finalizeDungeonExit: () => {
+    const state = get();
+    if (state.phase !== 'dungeon') return;
+    const run = state.dungeonRun;
+    let inv = state.inventory;
+    const clears = { ...state.clearedCaves };
+    const entries: ChronicleEntry[] = [];
+    if (run) {
+      const last = clears[run.caveId] ?? 0;
+      const cooldownOk = state.worldTime - last > 360;
+      if (cooldownOk) {
+        clears[run.caveId] = state.worldTime;
+        const tier = run.depthTier;
+        inv = addToInventory(inv, 'crystal', 1);
+        inv = addToInventory(inv, 'iron_ore', Math.min(6, 2 + (tier % 4)));
+        if (tier > 3) inv = addToInventory(inv, 'void_sigil', 1);
+        entries.push({
+          tick: state.tick,
+          season: state.season,
+          text: 'You surface from the depths with ore glinting in your pack.',
+          type: 'discovery',
+        });
+      } else {
+        entries.push({
+          tick: state.tick,
+          season: state.season,
+          text: 'The cave yielded little this soon after your last delve.',
+          type: 'environment',
+        });
+      }
+    }
+    set({
+      phase: 'playing',
+      activeCaveId: null,
+      activeCaveEntityId: null,
+      dungeonRun: null,
+      inventory: inv,
+      hotbar: inventoryToHotbar(inv),
+      clearedCaves: clears,
+      chronicle: [...state.chronicle, ...entries],
+    });
+  },
 }));
