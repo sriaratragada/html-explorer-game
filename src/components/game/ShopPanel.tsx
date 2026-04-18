@@ -7,6 +7,7 @@ export default function ShopPanel() {
   const overlay = useGameStore(s => s.overlay);
   const setOverlay = useGameStore(s => s.setOverlay);
   const currentLocation = useGameStore(s => s.currentLocation);
+  const shopMarketId = useGameStore(s => s.shopMarketId);
   const markets = useGameStore(s => s.markets);
   const gold = useGameStore(s => s.gold);
   const inventory = useGameStore(s => s.inventory);
@@ -14,14 +15,18 @@ export default function ShopPanel() {
   const sellItemAction = useGameStore(s => s.sellItemAction);
 
   if (overlay !== 'shop') return null;
-  const market = markets[currentLocation];
+  const marketKey = shopMarketId ?? currentLocation;
+  const market = markets[marketKey];
 
   return (
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-50 bg-ink/95 backdrop-blur-md overflow-auto pointer-events-auto">
         <div className="max-w-3xl mx-auto p-8">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="font-display text-2xl text-gold gold-glow">Market — {currentLocation.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</h2>
+            <h2 className="font-display text-2xl text-gold gold-glow">
+              {marketKey.startsWith('road_inn_') ? 'Roadside Inn' : 'Market'} —{' '}
+              {marketKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+            </h2>
             <div className="flex items-center gap-4">
               <span className="font-mono-game text-[11px] text-gold">🪙 {gold}g</span>
               <button onClick={() => setOverlay('none')} className="font-mono-game text-xs text-mist hover:text-gold transition-colors cursor-pointer">[ESC] Close</button>

@@ -178,6 +178,7 @@ export default function HudBar() {
             )}
             {continent && <span className="font-mono-game text-[9px] text-mist/40 border-l border-gold/10 pl-3">{CONTINENT_NAMES[continent] ?? continent}</span>}
             {phase === 'sailing' && <span className="font-mono-game text-[9px] text-blue-400 border-l border-gold/10 pl-3">⛵ SAILING</span>}
+            {phase === 'battle' && <span className="font-mono-game text-[9px] text-rose-400 border-l border-gold/10 pl-3">⚔ DUEL</span>}
             {mounted === 'horse' && <span className="font-mono-game text-[9px] text-amber-400 border-l border-gold/10 pl-3">🐎 MOUNTED</span>}
             </div>{/* end info row */}
           </div>{/* end left col */}

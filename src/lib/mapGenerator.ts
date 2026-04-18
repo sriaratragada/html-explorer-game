@@ -8,6 +8,7 @@ import {
   getSettlementSidewalkPositions,
 } from './settlementLayout';
 import { mergeHamletChunkRoads } from './hamlets';
+import { mergeWildernessPoisIntoChunk, invalidateWildernessCaches } from './wildernessPoi';
 
 // ── Value noise ────────────────────────────────────────────────────────────
 let SEED = 42;
@@ -20,6 +21,7 @@ export function setSeed(s: number) {
   chunkCache.clear();
   _roadSet = null;
   invalidateSettlementRoadCache();
+  invalidateWildernessCaches();
 }
 
 function hash(x: number, y: number): number {
@@ -114,46 +116,46 @@ export interface SettlementMeta {
 
 /** biomeRadius = half-width of settlement influence (capital 100 → ~200 tile footprint). */
 const SETTLEMENTS: Record<string, { x: number; y: number } & SettlementMeta> = {
-  // ── Auredia (Grand Kingdom) ──
-  highmarch:     { x: 2200, y: 4500, continent: 'auredia', kingdom: 'auredia_crown', type: 'capital',  biomeCode: T.GRASS, biomeRadius: 100 },
-  ashenford:     { x: 1200, y: 3500, continent: 'auredia', kingdom: 'auredia_crown', type: 'village',  biomeCode: T.GRASS, biomeRadius: 40 },
-  saltmoor:      { x: 700,  y: 5500, continent: 'auredia', kingdom: 'auredia_crown', type: 'port',     biomeCode: T.SAND,  biomeRadius: 70 },
-  ironhold:      { x: 1800, y: 2000, continent: 'auredia', kingdom: 'auredia_crown', type: 'fortress', biomeCode: T.MOUNTAIN, biomeRadius: 90 },
-  thornwick:     { x: 2800, y: 5800, continent: 'auredia', kingdom: 'auredia_crown', type: 'village',  biomeCode: T.DENSE_FOREST, biomeRadius: 40 },
-  graygate:      { x: 1600, y: 6200, continent: 'auredia', kingdom: 'auredia_crown', type: 'city',     biomeCode: T.GRASS, biomeRadius: 75 },
-  crossroads:    { x: 2000, y: 3000, continent: 'auredia', kingdom: 'auredia_crown', type: 'inn',      biomeCode: T.GRASS, biomeRadius: 30 },
-  coldpeak:      { x: 1000, y: 1500, continent: 'auredia', kingdom: 'auredia_crown', type: 'fortress', biomeCode: T.SNOW,  biomeRadius: 90 },
-  millhaven:     { x: 2600, y: 4000, continent: 'auredia', kingdom: 'auredia_crown', type: 'village',  biomeCode: T.GRASS, biomeRadius: 40 },
-  brightwater:   { x: 3200, y: 3200, continent: 'auredia', kingdom: 'auredia_crown', type: 'town',     biomeCode: T.GRASS, biomeRadius: 55 },
-  oakshire:      { x: 1400, y: 7500, continent: 'auredia', kingdom: 'auredia_crown', type: 'village',  biomeCode: T.FOREST, biomeRadius: 40 },
-  goldcrest:     { x: 3000, y: 6800, continent: 'auredia', kingdom: 'auredia_crown', type: 'fortress', biomeCode: T.HILL, biomeRadius: 90 },
+  // ── Auredia (Grand Kingdom) ── (~2.2× biome radius vs original plan)
+  highmarch:     { x: 2200, y: 4500, continent: 'auredia', kingdom: 'auredia_crown', type: 'capital',  biomeCode: T.GRASS, biomeRadius: 220 },
+  ashenford:     { x: 1200, y: 3500, continent: 'auredia', kingdom: 'auredia_crown', type: 'village',  biomeCode: T.GRASS, biomeRadius: 88 },
+  saltmoor:      { x: 700,  y: 5500, continent: 'auredia', kingdom: 'auredia_crown', type: 'port',     biomeCode: T.SAND,  biomeRadius: 154 },
+  ironhold:      { x: 1800, y: 2000, continent: 'auredia', kingdom: 'auredia_crown', type: 'fortress', biomeCode: T.MOUNTAIN, biomeRadius: 198 },
+  thornwick:     { x: 2800, y: 5800, continent: 'auredia', kingdom: 'auredia_crown', type: 'village',  biomeCode: T.DENSE_FOREST, biomeRadius: 88 },
+  graygate:      { x: 1600, y: 6200, continent: 'auredia', kingdom: 'auredia_crown', type: 'city',     biomeCode: T.GRASS, biomeRadius: 165 },
+  crossroads:    { x: 2000, y: 3000, continent: 'auredia', kingdom: 'auredia_crown', type: 'inn',      biomeCode: T.GRASS, biomeRadius: 66 },
+  coldpeak:      { x: 1000, y: 1500, continent: 'auredia', kingdom: 'auredia_crown', type: 'fortress', biomeCode: T.SNOW,  biomeRadius: 198 },
+  millhaven:     { x: 2600, y: 4000, continent: 'auredia', kingdom: 'auredia_crown', type: 'village',  biomeCode: T.GRASS, biomeRadius: 88 },
+  brightwater:   { x: 3200, y: 3200, continent: 'auredia', kingdom: 'auredia_crown', type: 'town',     biomeCode: T.GRASS, biomeRadius: 121 },
+  oakshire:      { x: 1400, y: 7500, continent: 'auredia', kingdom: 'auredia_crown', type: 'village',  biomeCode: T.FOREST, biomeRadius: 88 },
+  goldcrest:     { x: 3000, y: 6800, continent: 'auredia', kingdom: 'auredia_crown', type: 'fortress', biomeCode: T.HILL, biomeRadius: 198 },
 
   // ── Trivalen — Korrath (north mountains) ──
-  korrath_citadel: { x: 5500, y: 2200, continent: 'trivalen', kingdom: 'korrath', type: 'capital',  biomeCode: T.MOUNTAIN, biomeRadius: 100 },
-  frostmarch:      { x: 5000, y: 1500, continent: 'trivalen', kingdom: 'korrath', type: 'fortress', biomeCode: T.SNOW, biomeRadius: 90 },
-  deepmine:        { x: 6200, y: 1800, continent: 'trivalen', kingdom: 'korrath', type: 'village',  biomeCode: T.HILL, biomeRadius: 40 },
+  korrath_citadel: { x: 5500, y: 2200, continent: 'trivalen', kingdom: 'korrath', type: 'capital',  biomeCode: T.MOUNTAIN, biomeRadius: 220 },
+  frostmarch:      { x: 5000, y: 1500, continent: 'trivalen', kingdom: 'korrath', type: 'fortress', biomeCode: T.SNOW, biomeRadius: 198 },
+  deepmine:        { x: 6200, y: 1800, continent: 'trivalen', kingdom: 'korrath', type: 'village',  biomeCode: T.HILL, biomeRadius: 88 },
 
   // ── Trivalen — Vell (south coast) ──
-  vell_harbor:  { x: 5200, y: 7500, continent: 'trivalen', kingdom: 'vell', type: 'capital', biomeCode: T.SAND, biomeRadius: 100 },
-  sunfield:     { x: 5800, y: 7000, continent: 'trivalen', kingdom: 'vell', type: 'village', biomeCode: T.GRASS, biomeRadius: 40 },
-  coral_cove:   { x: 4800, y: 8000, continent: 'trivalen', kingdom: 'vell', type: 'port',    biomeCode: T.SAND, biomeRadius: 70 },
+  vell_harbor:  { x: 5200, y: 7500, continent: 'trivalen', kingdom: 'vell', type: 'capital', biomeCode: T.SAND, biomeRadius: 220 },
+  sunfield:     { x: 5800, y: 7000, continent: 'trivalen', kingdom: 'vell', type: 'village', biomeCode: T.GRASS, biomeRadius: 88 },
+  coral_cove:   { x: 4800, y: 8000, continent: 'trivalen', kingdom: 'vell', type: 'port',    biomeCode: T.SAND, biomeRadius: 154 },
 
   // ── Trivalen — Sarnak (east steppe) ──
-  sarnak_hold:  { x: 7000, y: 4500, continent: 'trivalen', kingdom: 'sarnak', type: 'capital',  biomeCode: T.GRASS, biomeRadius: 100 },
-  windridge:    { x: 7200, y: 3000, continent: 'trivalen', kingdom: 'sarnak', type: 'fortress', biomeCode: T.HILL, biomeRadius: 90 },
-  dustplain:    { x: 6800, y: 5500, continent: 'trivalen', kingdom: 'sarnak', type: 'village',  biomeCode: T.GRASS, biomeRadius: 40 },
+  sarnak_hold:  { x: 7000, y: 4500, continent: 'trivalen', kingdom: 'sarnak', type: 'capital',  biomeCode: T.GRASS, biomeRadius: 220 },
+  windridge:    { x: 7200, y: 3000, continent: 'trivalen', kingdom: 'sarnak', type: 'fortress', biomeCode: T.HILL, biomeRadius: 198 },
+  dustplain:    { x: 6800, y: 5500, continent: 'trivalen', kingdom: 'sarnak', type: 'village',  biomeCode: T.GRASS, biomeRadius: 88 },
 
   // ── Trivalen — contested ──
-  dustfall:  { x: 6000, y: 4800, continent: 'trivalen', kingdom: 'contested', type: 'ruins',      biomeCode: T.RUINS, biomeRadius: 45 },
-  marshend:  { x: 5200, y: 5200, continent: 'trivalen', kingdom: 'contested', type: 'village',    biomeCode: T.SWAMP, biomeRadius: 40 },
-  badlands:  { x: 6500, y: 6000, continent: 'trivalen', kingdom: 'contested', type: 'wilderness', biomeCode: T.HILL, biomeRadius: 55 },
+  dustfall:  { x: 6000, y: 4800, continent: 'trivalen', kingdom: 'contested', type: 'ruins',      biomeCode: T.RUINS, biomeRadius: 99 },
+  marshend:  { x: 5200, y: 5200, continent: 'trivalen', kingdom: 'contested', type: 'village',    biomeCode: T.SWAMP, biomeRadius: 88 },
+  badlands:  { x: 6500, y: 6000, continent: 'trivalen', kingdom: 'contested', type: 'wilderness', biomeCode: T.HILL, biomeRadius: 121 },
 
   // ── Uloren (unexplored) ──
-  mistwood:       { x: 8600, y: 4000, continent: 'uloren', kingdom: 'unknown', type: 'village',  biomeCode: T.DENSE_FOREST, biomeRadius: 40 },
-  ruins_of_aether:{ x: 9200, y: 5500, continent: 'uloren', kingdom: 'unknown', type: 'ruins',    biomeCode: T.RUINS, biomeRadius: 45 },
-  shadowfen:      { x: 8400, y: 7000, continent: 'uloren', kingdom: 'unknown', type: 'village',  biomeCode: T.SWAMP, biomeRadius: 40 },
-  whisper_stones: { x: 9000, y: 3000, continent: 'uloren', kingdom: 'unknown', type: 'ruins',    biomeCode: T.RUINS, biomeRadius: 45 },
-  hollowpeak:     { x: 9500, y: 6500, continent: 'uloren', kingdom: 'unknown', type: 'village',  biomeCode: T.MOUNTAIN, biomeRadius: 40 },
+  mistwood:       { x: 8600, y: 4000, continent: 'uloren', kingdom: 'unknown', type: 'village',  biomeCode: T.DENSE_FOREST, biomeRadius: 88 },
+  ruins_of_aether:{ x: 9200, y: 5500, continent: 'uloren', kingdom: 'unknown', type: 'ruins',    biomeCode: T.RUINS, biomeRadius: 99 },
+  shadowfen:      { x: 8400, y: 7000, continent: 'uloren', kingdom: 'unknown', type: 'village',  biomeCode: T.SWAMP, biomeRadius: 88 },
+  whisper_stones: { x: 9000, y: 3000, continent: 'uloren', kingdom: 'unknown', type: 'ruins',    biomeCode: T.RUINS, biomeRadius: 99 },
+  hollowpeak:     { x: 9500, y: 6500, continent: 'uloren', kingdom: 'unknown', type: 'village',  biomeCode: T.MOUNTAIN, biomeRadius: 88 },
 };
 
 export const LOCATION_COORDS: Record<string, { x: number; y: number }> =
@@ -232,12 +234,16 @@ export function getTileColor(tile: TileType, season: Season): string {
 export type WorldObjectType =
   | 'farm' | 'barn' | 'windmill' | 'watchtower' | 'dock' | 'bridge'
   | 'campfire' | 'market_stall' | 'ruins_pillar' | 'stone_wall'
-  | 'stone_circle' | 'hut' | 'well' | 'shrine' | 'gate' | 'fence';
+  | 'stone_circle' | 'hut' | 'well' | 'shrine' | 'gate' | 'fence'
+  | 'poi_lakeshore' | 'poi_chapel' | 'poi_knight_camp' | 'poi_wrecked_cart' | 'poi_standing_stone' | 'poi_monster_lair'
+  | 'poi_road_inn';
 
 export interface WorldObject {
   x: number; y: number;
   type: WorldObjectType;
   variant: number;
+  /** Stable id for wilderness POI progress / fishing cooldown */
+  poiId?: string;
 }
 
 export type AmbientEntityType =
@@ -323,56 +329,73 @@ function computeTile(x: number, y: number): number {
   const m = fbm(x * 0.005 + 500, y * 0.005 + 500, 4);
   const r = fbm(x * 0.015 + 200, y * 0.015 + 900, 3);
 
+  let landCode: number;
+
   // Continent-specific biome weighting
   if (bestContinent === 'auredia') {
-    // Temperate: more grass and forest
-    if (e < 0.30) return T.GRASS;
-    if (e < 0.48) return m > 0.62 ? T.FOREST : T.GRASS;
-    if (e < 0.58) return m > 0.55 ? T.DENSE_FOREST : (r > 0.55 ? T.HILL : T.FOREST);
-    if (e < 0.68) return T.HILL;
-    if (e < 0.78) return T.MOUNTAIN;
-    return T.SNOW;
-  }
-
-  if (bestContinent === 'trivalen') {
-    // Northern part = mountains (Korrath), south = grassland (Vell), east = steppe (Sarnak)
+    if (e < 0.30) landCode = T.GRASS;
+    else if (e < 0.48) landCode = m > 0.62 ? T.FOREST : T.GRASS;
+    else if (e < 0.58) landCode = m > 0.55 ? T.DENSE_FOREST : (r > 0.55 ? T.HILL : T.FOREST);
+    else if (e < 0.68) landCode = T.HILL;
+    else if (e < 0.78) landCode = T.MOUNTAIN;
+    else landCode = T.SNOW;
+  } else if (bestContinent === 'trivalen') {
     const relY = (y - 1000) / 7500;
     if (relY < 0.35) {
-      // Korrath territory: mountains & snow
-      if (e < 0.32) return m > 0.55 ? T.FOREST : T.GRASS;
-      if (e < 0.50) return T.HILL;
-      if (e < 0.65) return T.MOUNTAIN;
-      return T.SNOW;
+      if (e < 0.32) landCode = m > 0.55 ? T.FOREST : T.GRASS;
+      else if (e < 0.50) landCode = T.HILL;
+      else if (e < 0.65) landCode = T.MOUNTAIN;
+      else landCode = T.SNOW;
+    } else if (relY > 0.75) {
+      if (e < 0.35) landCode = T.GRASS;
+      else if (e < 0.50) landCode = m > 0.60 ? T.FOREST : T.GRASS;
+      else if (e < 0.62) landCode = r > 0.55 ? T.HILL : T.FOREST;
+      else landCode = T.HILL;
+    } else {
+      if (m > 0.68 && r > 0.52) landCode = T.SWAMP;
+      else if (e < 0.35) landCode = T.GRASS;
+      else if (e < 0.52) landCode = m > 0.58 ? T.FOREST : T.GRASS;
+      else if (e < 0.65) landCode = r > 0.56 ? T.HILL : T.FOREST;
+      else landCode = T.MOUNTAIN;
     }
-    if (relY > 0.75) {
-      // Vell territory: coastal grasslands
-      if (e < 0.35) return T.GRASS;
-      if (e < 0.50) return m > 0.60 ? T.FOREST : T.GRASS;
-      if (e < 0.62) return r > 0.55 ? T.HILL : T.FOREST;
-      return T.HILL;
-    }
-    // Contested middle / Sarnak steppe
-    if (m > 0.68 && r > 0.52) return T.SWAMP;
-    if (e < 0.35) return T.GRASS;
-    if (e < 0.52) return m > 0.58 ? T.FOREST : T.GRASS;
-    if (e < 0.65) return r > 0.56 ? T.HILL : T.FOREST;
-    return T.MOUNTAIN;
+  } else if (bestContinent === 'uloren') {
+    if (m > 0.65 && r > 0.50) landCode = T.SWAMP;
+    else if (e < 0.32) landCode = T.DENSE_FOREST;
+    else if (e < 0.50) landCode = m > 0.45 ? T.DENSE_FOREST : T.FOREST;
+    else if (e < 0.65) landCode = T.HILL;
+    else if (e < 0.78) landCode = T.MOUNTAIN;
+    else landCode = T.SNOW;
+  } else {
+    if (e < 0.40) landCode = m > 0.55 ? T.FOREST : T.GRASS;
+    else if (e < 0.55) landCode = T.HILL;
+    else landCode = T.MOUNTAIN;
   }
 
-  if (bestContinent === 'uloren') {
-    // Dense and mysterious: lots of dense forest, mountains, some swamp
-    if (m > 0.65 && r > 0.50) return T.SWAMP;
-    if (e < 0.32) return T.DENSE_FOREST;
-    if (e < 0.50) return m > 0.45 ? T.DENSE_FOREST : T.FOREST;
-    if (e < 0.65) return T.HILL;
-    if (e < 0.78) return T.MOUNTAIN;
-    return T.SNOW;
-  }
+  return applyInteriorLake(x, y, bestStr, bestContinent, landCode);
+}
 
-  // Fallback (small islands)
-  if (e < 0.40) return m > 0.55 ? T.FOREST : T.GRASS;
-  if (e < 0.55) return T.HILL;
-  return T.MOUNTAIN;
+/** Inland lake bowls (deterministic); shores use sand for walkable fishing access. */
+function applyInteriorLake(
+  x: number,
+  y: number,
+  bestStr: number,
+  continent: ContinentId | null,
+  code: number,
+): number {
+  if (bestStr < 0.06 || continent === null) return code;
+  if (code === T.MOUNTAIN || code === T.SNOW || code === T.RUINS || code === T.SWAMP) return code;
+  if (isRiver(x, y)) return code;
+
+  const bowl = fbm(x * 0.00165 + 2111 + continent.charCodeAt(0), y * 0.00165 + 3777, 5);
+  const spot = fbm(x * 0.018 + 900, y * 0.018 + 1200, 3);
+  const thresh = continent === 'uloren' ? 0.175 : 0.188;
+  if (bowl > thresh) return code;
+  if (spot > 0.34) return code;
+
+  const depth = (thresh - bowl) / thresh;
+  if (depth > 0.58) return T.DEEP_WATER;
+  if (depth > 0.22) return T.WATER;
+  return T.SAND;
 }
 
 /** Base terrain without settlement biome override (for layout / walkability probes). */
@@ -483,6 +506,7 @@ function generateChunk(cx: number, cy: number): ChunkData {
 
   // ── Objects ──
   generateChunkObjects(cx, cy, tiles, roads, nearby, objects);
+  mergeWildernessPoisIntoChunk(cx, cy, tiles, roads, objects);
 
   // ── Entities ──
   generateChunkEntities(cx, cy, tiles, roads, nearby, entities);

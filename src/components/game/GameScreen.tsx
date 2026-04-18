@@ -21,12 +21,23 @@ import Minimap from '@/components/game/Minimap';
 import BuildPanel from '@/components/game/BuildPanel';
 import FastTravelPanel from '@/components/game/FastTravelPanel';
 import CampStashPanel from '@/components/game/CampStashPanel';
+import BattleScreen from '@/components/game/BattleScreen';
 
 function DialogueOverlay() {
   const activeDialogue = useGameStore(s => s.activeDialogue);
   const setActiveDialogue = useGameStore(s => s.setActiveDialogue);
   if (!activeDialogue) return null;
-  return <DialogueView tree={activeDialogue} onClose={() => setActiveDialogue(null)} />;
+  return (
+    <DialogueView
+      tree={activeDialogue}
+      onClose={() => setActiveDialogue(null)}
+      onEffect={opt => {
+        if (opt.effects?.openRoadInnShop && activeDialogue.npcId.startsWith('road_inn_')) {
+          useGameStore.setState({ shopMarketId: activeDialogue.npcId, overlay: 'shop' });
+        }
+      }}
+    />
+  );
 }
 
 export default function GameScreen() {
@@ -63,6 +74,7 @@ export default function GameScreen() {
         <>
           <WorldMap />
           <Minimap />
+          {phase === 'battle' && <BattleScreen />}
         </>
       )}
       <Hotbar />

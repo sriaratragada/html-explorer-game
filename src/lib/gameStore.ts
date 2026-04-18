@@ -10,27 +10,30 @@ import {
   HotbarItem,
   DayNightPhase,
   MountState,
+  BattleState,
 } from './gameTypes';
 import { createWeatherState } from './weatherSystem';
 import { startTicker } from './worldTicker';
 import { INITIAL_NPCS, generateEvents, getWorldEvent, getPlayerTitle, ENVIRONMENT_ACTIONS, FOOD_VALUES, LOCATIONS } from './gameData';
 import { LOCATION_COORDS, isWalkableCode, getTileAt, MAP_W, MAP_H, TILE_NAMES, getContinentAt, getSettlementMeta, setSeed } from './mapGenerator';
 import { getExtendedLocationCoords, isHamletId } from './hamlets';
-import { initWorldEntities, getEntitiesNear, spawnEntity, removeEntity, getEntityById } from './worldEntities';
+import { initWorldEntities, getEntitiesNear, spawnEntity, removeEntity, getEntityById, type WorldEntity } from './worldEntities';
 import { createInventory, addToInventory, removeFromInventory, equipItem, unequipItem, craft, canCraft, Inventory, getWeaponDamage, getTotalArmor, countItem } from './craftingSystem';
 import { createSkillTree, addXp, selectPerk, SkillTree } from './skills';
 import { ITEMS } from './items';
 import { RECIPES } from './recipes';
-import { createMarkets } from './economySystem';
+import { createMarkets, buildRoadInnMarkets } from './economySystem';
 import { createFactions, FactionState } from './factionSystem';
 import { Quest } from './questSystem';
 import { createBountyBoard, BountyBoard } from './bountyBoard';
 import { createRegionalModifiers } from './regionalState';
 import { createFogMap, revealAroundPlayer, revealLocation, FogMap } from './fogOfWar';
 import { createHousing, purchasePlot, placeFurniture, Housing, PLOT_PRICES } from './housing';
-import { playerAttack } from './combatSystem';
-import { DialogueTree, getDialogueTree, genericDialogue } from './dialogue';
+import { playerAttack, computePlayerStrikeDamage, getKillLoot, enemyAttackDamage, getKillXp } from './combatSystem';
+import { DialogueTree, getDialogueTree, genericDialogue, roadInnDialogue } from './dialogue';
 import { generateNpcDialogue, isGeminiConfigured } from './geminiNpc';
+import { findNearestWildernessPoi, getRoadInnSites } from './wildernessPoi';
+import { rollFishingLoot } from './fishingLoot';
 
 const SEASON_ORDER: Season[] = ['thaw', 'summer', 'harvest', 'dark'];
 const TICKS_PER_SEASON = 12;
@@ -156,6 +159,9 @@ interface GameStore extends GameState {
   moveFromCampToBackpack: (campSlotIndex: number) => void;
   moveFromBackpackToCamp: (invSlotIndex: number) => void;
   setEscortCaravan: (entityId: string | null) => void;
+  battleStrikeAction: () => void;
+  battleGuardAction: () => void;
+  battleFleeAction: () => void;
 }
 
 const starterInv = makeStarterInventory();
@@ -213,6 +219,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   overlay: 'none',
   tutorialStep: 'cinematic',
   environmentCooldowns: {},
+  shopMarketId: null,
+  wildPoiProgress: {},
+  battleState: null,
 
   startGame: () => {
     setSeed(42);
@@ -225,6 +234,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       text: 'A traveler arrived in Ashenford at the start of the Thaw. No one knew their name. No one asked. The world does not care about you. Not yet.',
       type: 'world',
     };
+    const baseMarkets = createMarkets();
+    const innMarkets = buildRoadInnMarkets(getRoadInnSites());
     set({
       phase: 'playing',
       isMoving: false,
@@ -233,7 +244,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       weather: createWeatherState(), season: 'thaw', seasonTick: 0, seed: 42,
       inventory: inv, hotbar: inventoryToHotbar(inv), activeSlot: 0, gold: 10,
       skills: createSkillTree(),
-      markets: createMarkets(),
+      markets: { ...baseMarkets, ...innMarkets },
       reputation: { conquest: 0, trade: 0, craft: 0, diplomacy: 0, exploration: 0, arcane: 0 },
       factions: { amber: 0, iron: 0, green: 0, scholar: 0, ashen: 0, tide: 0 },
       factionStates: createFactions(),
@@ -250,6 +261,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       playerTitle: 'Unknown Traveler',
       fog, housing: createHousing(),
       overlay: 'none', tutorialStep: 'movement', environmentCooldowns: {},
+      shopMarketId: null, wildPoiProgress: {}, battleState: null,
     });
     startTicker();
   },
@@ -258,6 +270,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   useItem: () => {
     const state = get();
+    if (state.phase === 'battle') return;
     if (state.phase !== 'playing' && state.phase !== 'sailing') return;
     const slot = state.inventory.slots[state.activeSlot];
     if (!slot) return;
@@ -302,7 +315,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   movePlayer: (dx: number, dy: number) => {
     const state = get();
-    if (state.currentEvent || state.lastResult || state.phase === 'dead' || state.phase === 'dungeon') return;
+    if (state.currentEvent || state.lastResult || state.phase === 'dead' || state.phase === 'dungeon' || state.phase === 'battle') return;
 
     const speed = state.mounted === 'horse' ? 2 : 1;
     const nx = state.playerX + dx * speed;
@@ -489,7 +502,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (worldEvent) newChronicle.push({ tick: newTick, season: state.season, text: worldEvent, type: 'world' });
     set({ tick: newTick, chronicle: [...state.chronicle, ...newChronicle] });
   },
-  setOverlay: (o: OverlayType) => set({ overlay: o }),
+  setOverlay: (o: OverlayType) =>
+    set(s => ({
+      overlay: o,
+      shopMarketId: o === 'shop' ? s.shopMarketId : null,
+    })),
   advanceTutorial: () => {
     const state = get();
     const steps: TutorialStep[] = ['cinematic', 'movement', 'hotkeys', 'landmark', 'done'];
@@ -524,6 +541,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Returns true if an entity interaction was handled (A13 fix)
   interactEntity: () => {
     const state = get();
+    if (state.phase === 'battle') return false;
     const nearby = getEntitiesNear(state.playerX, state.playerY, 3);
 
     // Dismount horse
@@ -561,6 +579,190 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const entry: ChronicleEntry = { tick: state.tick, season: state.season, text: 'The traveler boarded a boat and set sail.', type: 'action' };
       set({ phase: 'sailing', mounted: 'boat', chronicle: [...state.chronicle, entry] });
       return true;
+    }
+
+    const wildPoi = findNearestWildernessPoi(state.playerX, state.playerY, 5);
+    if (wildPoi && state.phase === 'playing') {
+      const o = wildPoi.obj;
+      const poiKey = o.poiId ?? `w_${o.x}_${o.y}_${o.type}`;
+      const prog = state.wildPoiProgress[poiKey] ?? {};
+      const w0 = Object.values(state.weather)[0];
+      const weatherStr = (w0?.state ?? 'clear') as import('./gameTypes').WeatherState;
+
+      if (o.type === 'poi_lakeshore') {
+        if (countItem(state.inventory, 'fishing_rod') < 1) {
+          set({ lastResult: 'You need a fishing rod to fish here.' });
+          return true;
+        }
+        if (state.tick - (prog.lastFishTick ?? -999) < 5) {
+          set({ lastResult: 'The line needs time to settle.' });
+          return true;
+        }
+        const loot = rollFishingLoot({
+          continent: getContinentAt(state.playerX, state.playerY),
+          season: state.season,
+          weather: weatherStr,
+          regional: state.regionalModifiers,
+          craftingLevel: state.skills.crafting.level,
+          seedSalt: o.x * 10007 + o.y + state.tick,
+        });
+        let inv = state.inventory;
+        const lines: string[] = [];
+        for (const row of loot) {
+          inv = addToInventory(inv, row.itemId, row.qty);
+          lines.push(`${row.qty}× ${ITEMS[row.itemId]?.name ?? row.itemId}`);
+        }
+        const newSkills = loot.length ? addXp(state.skills, 'crafting', 4) : state.skills;
+        set({
+          inventory: inv,
+          hotbar: inventoryToHotbar(inv),
+          skills: newSkills,
+          wildPoiProgress: { ...state.wildPoiProgress, [poiKey]: { ...prog, lastFishTick: state.tick } },
+          lastResult: loot.length ? `You haul up: ${lines.join(', ')}.` : 'Nothing bites this time.',
+          chronicle: loot.length
+            ? [...state.chronicle, { tick: state.tick, season: state.season, text: `Fished at a lakeshore (${lines.join(', ')}).`, type: 'environment' }]
+            : state.chronicle,
+        });
+        return true;
+      }
+
+      if (o.type === 'poi_wrecked_cart') {
+        if (prog.looted) {
+          set({ lastResult: 'The cart has already been picked clean.' });
+          return true;
+        }
+        const loot = getKillLoot('bandit', o.x * 1000 + o.y);
+        let inv = state.inventory;
+        let gold = state.gold + loot.gold;
+        for (const row of loot.items) inv = addToInventory(inv, row.itemId, row.qty);
+        set({
+          inventory: inv,
+          hotbar: inventoryToHotbar(inv),
+          gold,
+          wildPoiProgress: { ...state.wildPoiProgress, [poiKey]: { ...prog, looted: true } },
+          lastResult: 'You salvage what you can from the wreckage.',
+          chronicle: [
+            ...state.chronicle,
+            { tick: state.tick, season: state.season, text: 'The traveler searched a wrecked cart by the road.', type: 'action' },
+          ],
+        });
+        return true;
+      }
+
+      if (o.type === 'poi_chapel') {
+        const heal = Math.min(state.maxHealth, state.health + 8);
+        set({
+          health: heal,
+          wildPoiProgress: { ...state.wildPoiProgress, [poiKey]: { ...prog, spoken: true } },
+          lastResult: 'A quiet moment beneath the stones. You feel steadier.',
+          chronicle: [
+            ...state.chronicle,
+            { tick: state.tick, season: state.season, text: 'The traveler rested in a roadside chapel.', type: 'environment' },
+          ],
+        });
+        return true;
+      }
+
+      if (o.type === 'poi_standing_stone') {
+        set({
+          wildPoiProgress: { ...state.wildPoiProgress, [poiKey]: { ...prog, spoken: true } },
+          lastResult: 'Old marks circle the stone. Whatever they meant, the wind has kept the secret.',
+          chronicle: [
+            ...state.chronicle,
+            { tick: state.tick, season: state.season, text: 'The traveler studied a circle of standing stones.', type: 'discovery' },
+          ],
+        });
+        return true;
+      }
+
+      if (o.type === 'poi_knight_camp') {
+        const bs: BattleState = {
+          foeKind: 'knight',
+          foeHp: 55,
+          foeMaxHp: 55,
+          label: 'Knight-errant',
+          playerGuarded: false,
+          log: ['An armored figure rises to meet you.'],
+        };
+        set({
+          phase: 'battle',
+          battleState: bs,
+          lastResult: null,
+          chronicle: [
+            ...state.chronicle,
+            { tick: state.tick, season: state.season, text: 'A duel begins at a knight’s camp.', type: 'action' },
+          ],
+        });
+        return true;
+      }
+
+      if (o.type === 'poi_monster_lair') {
+        const bs: BattleState = {
+          foeKind: 'warband',
+          foeHp: 70,
+          foeMaxHp: 70,
+          label: 'Lair raiders',
+          playerGuarded: false,
+          log: ['Something hungry stirs in the dark.'],
+        };
+        set({
+          phase: 'battle',
+          battleState: bs,
+          lastResult: null,
+          chronicle: [
+            ...state.chronicle,
+            { tick: state.tick, season: state.season, text: 'The traveler challenged a monster lair.', type: 'action' },
+          ],
+        });
+        return true;
+      }
+
+      if (o.type === 'poi_road_inn') {
+        const innId = o.poiId ?? poiKey;
+        const minorKey = innId;
+        const prevMinor = state.minorNpcState[minorKey] ?? { memories: [], disposition: 0, lastSeenTick: 0 };
+        const memLine = 'Stopped at a roadside inn along the trade way.';
+        const nextMinor = {
+          ...state.minorNpcState,
+          [minorKey]: {
+            memories: [...prevMinor.memories.filter(m => !m.startsWith('Spoke at tick')), memLine].slice(-12),
+            disposition: prevMinor.disposition,
+            lastSeenTick: state.tick,
+          },
+        };
+        const tree = roadInnDialogue(innId);
+        const continent = getContinentAt(state.playerX, state.playerY) ?? 'auredia';
+        const wx = Object.values(state.weather)[0];
+        const weatherStr = wx?.state ?? 'clear';
+        if (isGeminiConfigured()) {
+          void (async () => {
+            const st = get();
+            const minor = st.minorNpcState[minorKey] ?? { memories: [], disposition: 0, lastSeenTick: 0 };
+            const res = await generateNpcDialogue({
+              npcName: 'Innkeeper',
+              npcJob: 'innkeeper',
+              npcPersonality: 'Warm, watchful, remembers regulars and prices.',
+              location: 'a roadside inn on the trade way',
+              continent,
+              season: st.season,
+              weather: weatherStr,
+              dayPhase: st.dayNightPhase,
+              playerReputation: st.reputation as unknown as Record<string, number>,
+              npcDisposition: minor.disposition,
+              npcMemories: minor.memories,
+              recentChronicle: st.chronicle.slice(-5).map(c => c.text),
+              worldEvents: worldEventsFromRegional(st),
+              tileSummary: `Road inn (${Math.round(st.playerX)}, ${Math.round(st.playerY)})`,
+            });
+            if (res) {
+              const opts = res.options.map(o2 => o2.text);
+              set({ activeDialogue: runtimeDialogueFromGemini(minorKey, 'Innkeeper', res.npcText, opts) });
+            }
+          })();
+        }
+        set({ minorNpcState: nextMinor, activeDialogue: tree });
+        return true;
+      }
     }
 
     // Enter cave/dungeon
@@ -602,8 +804,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return true;
     }
 
-    // Talk to settlement or hamlet NPC
-    const talkNpc = nearby.find(e => e.kind === 'settlement_npc' || e.kind === 'hamlet_npc');
+    // Talk to settlement or hamlet NPC (nearest wins)
+    let talkNpc: (typeof nearby)[number] | undefined;
+    let talkBest = Infinity;
+    for (const e of nearby) {
+      if (e.kind !== 'settlement_npc' && e.kind !== 'hamlet_npc') continue;
+      const d = Math.hypot(e.x - state.playerX, e.y - state.playerY);
+      if (d < talkBest) {
+        talkBest = d;
+        talkNpc = e;
+      }
+    }
     if (talkNpc) {
       const data = talkNpc.data as Record<string, unknown>;
       const npcId = data.npcId as string | undefined;
@@ -619,10 +830,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (!tree) tree = genericDialogue(minorKey, name, job);
 
       const prevMinor = state.minorNpcState[minorKey] ?? { memories: [], disposition: 0, lastSeenTick: 0 };
+      const memAppend = minorKey.startsWith('road_inn_')
+        ? 'Heard rumors at a roadside inn.'
+        : `Spoke at tick ${state.tick}`;
       const nextMinor = {
         ...state.minorNpcState,
         [minorKey]: {
-          memories: [...prevMinor.memories, `Spoke at tick ${state.tick}`].slice(-12),
+          memories: [...prevMinor.memories, memAppend].slice(-12),
           disposition: prevMinor.disposition,
           lastSeenTick: state.tick,
         },
@@ -687,6 +901,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   attackAction: () => {
     const state = get();
+    if (state.phase === 'battle') return;
     if (state.phase !== 'playing') return;
     const result = playerAttack(state.playerX, state.playerY, state.facingDir.dx, state.facingDir.dy, state.inventory, state.skills);
     if (!result) return;
@@ -782,13 +997,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   buyItemAction: (itemId: string, qty: number) => {
     const state = get();
-    const market = state.markets[state.currentLocation];
+    const mkey = state.shopMarketId ?? state.currentLocation;
+    const market = state.markets[mkey];
     if (!market) return;
     const mItem = market.items.find(i => i.itemId === itemId);
     if (!mItem || mItem.stock < qty) return;
     const scarcity = mItem.stock < 3 ? 2.0 : mItem.stock < 8 ? 1.3 : mItem.stock > 20 ? 0.7 : 1.0;
     let price = Math.max(1, Math.round(mItem.basePrice * mItem.priceMultiplier * scarcity));
-    const locals = state.npcs.filter(n => n.location === state.currentLocation);
+    const locals = state.npcs.filter(n => n.location === state.currentLocation || n.location === mkey);
     const bestDisp = locals.length ? Math.max(...locals.map(n => n.disposition)) : 0;
     const discount = Math.min(0.12, Math.max(0, bestDisp) / 120);
     price = Math.max(1, Math.round(price * (1 - discount)));
@@ -796,7 +1012,132 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (state.gold < totalCost) return;
     const newInv = addToInventory(state.inventory, itemId, qty);
     const newMarket = { ...market, items: market.items.map(i => i.itemId === itemId ? { ...i, stock: i.stock - qty } : i) };
-    set({ gold: state.gold - totalCost, inventory: newInv, hotbar: inventoryToHotbar(newInv), markets: { ...state.markets, [state.currentLocation]: newMarket } });
+    const minorKey = state.shopMarketId;
+    let minorPatch = state.minorNpcState;
+    if (minorKey?.startsWith('road_inn_')) {
+      const prev = state.minorNpcState[minorKey] ?? { memories: [], disposition: 0, lastSeenTick: 0 };
+      minorPatch = {
+        ...state.minorNpcState,
+        [minorKey]: {
+          ...prev,
+          memories: [...prev.memories, `Purchased ${itemId} at the inn`].slice(-12),
+          lastSeenTick: state.tick,
+        },
+      };
+    }
+    set({
+      gold: state.gold - totalCost,
+      inventory: newInv,
+      hotbar: inventoryToHotbar(newInv),
+      markets: { ...state.markets, [mkey]: newMarket },
+      minorNpcState: minorPatch,
+    });
+  },
+
+  battleStrikeAction: () => {
+    const state = get();
+    if (state.phase !== 'battle' || !state.battleState) return;
+    const bs = state.battleState;
+    const dmg = computePlayerStrikeDamage(state.inventory, state.skills, bs.playerGuarded ? 0.88 : 1);
+    let foeHp = Math.max(0, bs.foeHp - dmg);
+    const log = [...bs.log, `You strike for ${dmg}.`];
+    let nextBattle: BattleState | null = { ...bs, foeHp, playerGuarded: false, log };
+    let phase = state.phase;
+    let inv = state.inventory;
+    let gold = state.gold;
+    let skills = addXp(state.skills, 'combat', Math.max(1, Math.floor(dmg * 0.35)));
+    let health = state.health;
+    let chron = state.chronicle;
+    if (foeHp <= 0) {
+      const loot = getKillLoot(bs.foeKind, state.tick + dmg);
+      for (const row of loot.items) inv = addToInventory(inv, row.itemId, row.qty);
+      gold += loot.gold;
+      skills = addXp(skills, 'combat', getKillXp(bs.foeKind));
+      chron = [
+        ...state.chronicle,
+        {
+          tick: state.tick,
+          season: state.season,
+          text: `The traveler won a duel against ${bs.label}.`,
+          type: 'action' as const,
+        },
+      ];
+      phase = 'playing';
+      nextBattle = null;
+    } else {
+      const foeEnt = { id: 'battle_foe', kind: bs.foeKind, x: 0, y: 0, hp: 1, maxHp: 1, data: {} } as WorldEntity;
+      let hit = enemyAttackDamage(foeEnt, getTotalArmor(state.inventory));
+      if (bs.playerGuarded) hit = Math.max(1, Math.floor(hit * 0.55));
+      health = Math.max(0, health - hit);
+      nextBattle.log = [...nextBattle.log, `${bs.label} strikes for ${hit}.`];
+      if (health <= 0) {
+        phase = 'dead';
+        nextBattle = null;
+        chron = [...state.chronicle, { tick: state.tick, season: state.season, text: 'The traveler fell in single combat.', type: 'action' as const }];
+      }
+    }
+    set({
+      phase,
+      battleState: nextBattle,
+      inventory: inv,
+      hotbar: inventoryToHotbar(inv),
+      gold,
+      skills,
+      health,
+      chronicle: chron,
+    });
+  },
+
+  battleGuardAction: () => {
+    const state = get();
+    if (state.phase !== 'battle' || !state.battleState) return;
+    const bs = { ...state.battleState, playerGuarded: true, log: [...state.battleState.log, 'You raise your guard.'] };
+    const foeEnt = { id: 'battle_foe', kind: bs.foeKind, x: 0, y: 0, hp: 1, maxHp: 1, data: {} } as WorldEntity;
+    let hit = enemyAttackDamage(foeEnt, getTotalArmor(state.inventory));
+    hit = Math.max(1, Math.floor(hit * 0.55));
+    const health = Math.max(0, state.health - hit);
+    bs.log = [...bs.log, `${bs.label} strikes for ${hit} (guarded).`];
+    let phase: typeof state.phase = 'battle';
+    let nextBattle: BattleState | null = bs;
+    let chron = state.chronicle;
+    if (health <= 0) {
+      phase = 'dead';
+      nextBattle = null;
+      chron = [...state.chronicle, { tick: state.tick, season: state.season, text: 'The traveler fell in single combat.', type: 'action' as const }];
+    }
+    set({ phase, battleState: nextBattle, health, chronicle: chron });
+  },
+
+  battleFleeAction: () => {
+    const state = get();
+    if (state.phase !== 'battle' || !state.battleState) return;
+    const ok = Math.random() < 0.58;
+    if (ok) {
+      set({
+        phase: 'playing',
+        battleState: null,
+        lastResult: 'You break away from the duel.',
+        chronicle: [
+          ...state.chronicle,
+          { tick: state.tick, season: state.season, text: 'The traveler fled from a duel.', type: 'action' },
+        ],
+      });
+      return;
+    }
+    const bs = state.battleState;
+    const foeEnt = { id: 'battle_foe', kind: bs.foeKind, x: 0, y: 0, hp: 1, maxHp: 1, data: {} } as WorldEntity;
+    const hit = enemyAttackDamage(foeEnt, getTotalArmor(state.inventory));
+    const health = Math.max(0, state.health - hit);
+    const log = [...bs.log, `You stumble—${bs.label} strikes for ${hit}.`];
+    let phase: typeof state.phase = 'battle';
+    let nextBattle: BattleState | null = { ...bs, log, playerGuarded: false };
+    let chron = state.chronicle;
+    if (health <= 0) {
+      phase = 'dead';
+      nextBattle = null;
+      chron = [...state.chronicle, { tick: state.tick, season: state.season, text: 'The traveler fell trying to flee.', type: 'action' as const }];
+    }
+    set({ phase, battleState: nextBattle, health, chronicle: chron });
   },
 
   sellItemAction: (itemId: string, qty: number) => {

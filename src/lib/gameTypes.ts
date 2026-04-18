@@ -103,7 +103,22 @@ export interface EnvironmentAction {
   itemReward?: { id: string; name: string; icon: string; quantity: number; type: ItemType; description: string };
 }
 
-export type OverlayType = 'none' | 'player' | 'chronicle' | 'map' | 'help' | 'inventory' | 'crafting' | 'skills' | 'quests' | 'faction' | 'shop' | 'build' | 'saveload' | 'fasttravel' | 'camp';
+export type OverlayType =
+  | 'none'
+  | 'player'
+  | 'chronicle'
+  | 'map'
+  | 'help'
+  | 'inventory'
+  | 'crafting'
+  | 'skills'
+  | 'quests'
+  | 'faction'
+  | 'shop'
+  | 'build'
+  | 'saveload'
+  | 'fasttravel'
+  | 'camp';
 
 export type ItemType = 'tool' | 'weapon' | 'resource' | 'food' | 'armor' | 'misc' | 'potion' | 'trade_good';
 
@@ -128,8 +143,24 @@ export interface MinorNpcState {
   lastSeenTick: number;
 }
 
+export interface WildPoiProgress {
+  looted?: boolean;
+  lastFishTick?: number;
+  spoken?: boolean;
+}
+
+export interface BattleState {
+  foeKind: 'bandit' | 'warband' | 'knight';
+  foeHp: number;
+  foeMaxHp: number;
+  label: string;
+  /** When true, next foe strike is weakened */
+  playerGuarded: boolean;
+  log: string[];
+}
+
 export interface GameState {
-  phase: 'title' | 'playing' | 'chronicle' | 'dead' | 'sailing' | 'dungeon';
+  phase: 'title' | 'playing' | 'chronicle' | 'dead' | 'sailing' | 'dungeon' | 'battle';
   health: number;
   maxHealth: number;
   hunger: number;
@@ -211,4 +242,11 @@ export interface GameState {
   overlay: OverlayType;
   tutorialStep: TutorialStep;
   environmentCooldowns: Record<string, number>;
+
+  /** When `overlay === 'shop'`, optional market row id (e.g. `road_inn_*`). */
+  shopMarketId: string | null;
+  /** Wilderness / POI interaction progress (keyed by `poiId`). */
+  wildPoiProgress: Record<string, WildPoiProgress>;
+  /** Turn-based duel UI state (Pokémon-style encounter). */
+  battleState: BattleState | null;
 }

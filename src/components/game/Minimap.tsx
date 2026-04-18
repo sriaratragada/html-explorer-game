@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react';
 import { useGameStore } from '@/lib/gameStore';
-import { MAP_W, MAP_H, LOCATION_COORDS, getContinentAt } from '@/lib/mapGenerator';
+import { MAP_W, MAP_H, LOCATION_COORDS, getContinentAt, getSettlementMeta } from '@/lib/mapGenerator';
+import { getCoastalPortMarkers } from '@/lib/coastalPorts';
 import { getHamlets } from '@/lib/hamlets';
 import { LOCATIONS } from '@/lib/gameData';
 import { getEntitiesNear } from '@/lib/worldEntities';
@@ -51,6 +52,33 @@ export default function Minimap() {
           ctx.fillRect(sx, sy, sw + 0.5, sh + 0.5);
         }
       }
+    }
+
+    // Ports & coastal landings (anchors)
+    ctx.fillStyle = 'rgba(80, 160, 220, 0.85)';
+    for (const [id, c] of Object.entries(LOCATION_COORDS)) {
+      const meta = getSettlementMeta(id);
+      if (meta?.type === 'port' || id === 'vell_harbor') {
+        const sx = (c.x / MAP_W) * MM_SIZE;
+        const sy = (c.y / MAP_H) * MM_SIZE;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy - 3);
+        ctx.lineTo(sx + 3.5, sy + 2.5);
+        ctx.lineTo(sx - 3.5, sy + 2.5);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    ctx.fillStyle = 'rgba(80, 160, 220, 0.45)';
+    for (const m of getCoastalPortMarkers()) {
+      const sx = (m.x / MAP_W) * MM_SIZE;
+      const sy = (m.y / MAP_H) * MM_SIZE;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy - 2.2);
+      ctx.lineTo(sx + 2.5, sy + 1.8);
+      ctx.lineTo(sx - 2.5, sy + 1.8);
+      ctx.closePath();
+      ctx.fill();
     }
 
     // Road network

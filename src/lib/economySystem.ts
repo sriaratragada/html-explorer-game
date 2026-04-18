@@ -1,7 +1,8 @@
 import { ITEMS } from './items';
-import { LOCATION_COORDS, getSettlementMeta } from './mapGenerator';
+import { LOCATION_COORDS, getSettlementMeta, type ContinentId } from './mapGenerator';
 import type { RegionalModifiers } from './regionalState';
 import { getContinentModifierMul } from './regionalState';
+import type { RoadInnSite } from './wildernessPoi';
 
 export interface MarketItem {
   itemId: string;
@@ -13,6 +14,8 @@ export interface MarketItem {
 export interface Market {
   locationId: string;
   items: MarketItem[];
+  /** Roadside inn markets (no settlement row in SETTLEMENTS). */
+  innContinent?: ContinentId;
 }
 
 const TRADE_GOODS = ['salt', 'spice', 'silk', 'iron_ingot', 'wood', 'stone', 'leather', 'cloth', 'herb', 'bread', 'cooked_meat', 'fish'];
@@ -23,6 +26,32 @@ function getBaseStock(locType: string, itemId: string): number {
   if (locType === 'fortress' && ['iron_ingot', 'leather'].includes(itemId)) return base * 2;
   if (locType === 'village' && ['bread', 'cooked_meat', 'wood'].includes(itemId)) return base * 2;
   return base;
+}
+
+function hashStock(seed: number, i: number): number {
+  let h = (seed * 9301 + i * 49297 + 1337) & 0xffffffff;
+  h = ((h ^ (h >> 13)) * 1274126177) & 0xffffffff;
+  return (h & 0x7fffffff) / 0x7fffffff;
+}
+
+/** Small curated stocks for trail inns (deterministic per inn id). */
+export function buildRoadInnMarkets(sites: RoadInnSite[]): Record<string, Market> {
+  const markets: Record<string, Market> = {};
+  const goods = ['bread', 'cooked_meat', 'fish', 'herb', 'cloth', 'waterskin'] as const;
+  for (const s of sites) {
+    const seed = s.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+    const items: MarketItem[] = goods.map((itemId, i) => {
+      const def = ITEMS[itemId];
+      return {
+        itemId,
+        stock: 3 + Math.floor(hashStock(seed, i + 2) * 9),
+        basePrice: def?.value ?? 5,
+        priceMultiplier: 0.9 + hashStock(seed, i + 5) * 0.35,
+      };
+    });
+    markets[s.id] = { locationId: s.id, innContinent: s.continent, items };
+  }
+  return markets;
 }
 
 export function createMarkets(): Record<string, Market> {
@@ -69,9 +98,11 @@ const CARGO_TO_ITEM: Record<string, string> = {
 
 export function tickMarket(market: Market, modifiers?: RegionalModifiers): Market {
   const meta = getSettlementMeta(market.locationId);
+  const continent = meta?.continent ?? market.innContinent;
+  const kingdom = meta?.kingdom ?? 'auredia_crown';
   const { stockMul, priceMul } =
-    meta && modifiers
-      ? getContinentModifierMul(meta.continent, modifiers, meta.kingdom)
+    continent && modifiers
+      ? getContinentModifierMul(continent, modifiers, kingdom)
       : { stockMul: 1, priceMul: 1 };
 
   return {

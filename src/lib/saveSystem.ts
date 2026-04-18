@@ -54,6 +54,7 @@ export function saveToSlot(slot: number) {
       dismissResult: undefined, viewChronicle: undefined, backToGame: undefined,
       advanceTick: undefined, setOverlay: undefined, advanceTutorial: undefined,
       performEnvironmentAction: undefined, interactEntity: undefined,
+      battleStrikeAction: undefined, battleGuardAction: undefined, battleFleeAction: undefined,
     },
     entities: entityJson,
   };

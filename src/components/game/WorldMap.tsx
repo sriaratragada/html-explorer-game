@@ -22,6 +22,13 @@ const OBJ_COLORS: Record<WorldObjectType, [number, number, number]> = {
   campfire: [220, 120, 30], market_stall: [180, 140, 60], ruins_pillar: [130, 120, 100],
   stone_wall: [110, 110, 105], stone_circle: [140, 135, 120], hut: [150, 110, 70],
   well: [100, 90, 80], shrine: [210, 190, 130], gate: [80, 75, 65], fence: [170, 140, 90],
+  poi_lakeshore: [70, 120, 160],
+  poi_chapel: [180, 170, 200],
+  poi_knight_camp: [140, 90, 90],
+  poi_wrecked_cart: [120, 70, 50],
+  poi_standing_stone: [110, 110, 130],
+  poi_monster_lair: [90, 40, 90],
+  poi_road_inn: [160, 120, 70],
 };
 
 const ENTITY_COLORS: Record<AmbientEntityType, string> = {
@@ -159,6 +166,66 @@ function drawObject(ctx: CanvasRenderingContext2D, obj: WorldObject, sx: number,
       ctx.moveTo(z * 0.8, z * 0.2); ctx.lineTo(z * 0.8, -z * 0.8);
       ctx.moveTo(-z * 0.8, -z * 0.35); ctx.lineTo(z * 0.8, -z * 0.35);
       ctx.stroke();
+      break;
+    }
+    case 'poi_lakeshore': {
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.arc(0, 0, z * 0.9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(200,220,255,0.5)';
+      ctx.lineWidth = z * 0.12;
+      ctx.stroke();
+      break;
+    }
+    case 'poi_chapel': {
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 0.8, -z * 1.6, z * 1.6, z * 1.8);
+      ctx.beginPath();
+      ctx.moveTo(-z * 1.0, -z * 1.6);
+      ctx.lineTo(0, -z * 2.4);
+      ctx.lineTo(z * 1.0, -z * 1.6);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    case 'poi_knight_camp': {
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 1.2, z * 0.2, z * 2.4, z * 0.35);
+      ctx.strokeStyle = '#c8a060';
+      ctx.lineWidth = z * 0.15;
+      ctx.beginPath();
+      ctx.arc(0, -z * 0.4, z * 0.9, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    }
+    case 'poi_wrecked_cart': {
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 1.4, -z * 0.2, z * 2.8, z * 0.6);
+      ctx.fillStyle = '#3a3028';
+      ctx.fillRect(-z * 0.3, -z * 0.9, z * 0.6, z * 0.5);
+      break;
+    }
+    case 'poi_standing_stone': {
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 0.35, -z * 2.2, z * 0.7, z * 2.5);
+      break;
+    }
+    case 'poi_monster_lair': {
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(0, z * 0.6);
+      ctx.lineTo(-z * 1.2, -z * 0.8);
+      ctx.lineTo(z * 1.2, -z * 0.8);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    case 'poi_road_inn': {
+      ctx.fillStyle = col;
+      ctx.fillRect(-z * 1.4, -z * 1.0, z * 2.8, z * 1.8);
+      ctx.fillStyle = 'rgba(255,200,100,0.35)';
+      ctx.fillRect(-z * 0.5, -z * 1.6, z * 1.0, z * 0.35);
       break;
     }
     default:
@@ -488,7 +555,7 @@ export default function WorldMap() {
       }
 
       // ── World entities (boats, caves, enemies, resources, horses) ──
-      if (zoom >= 3) {
+      if (zoom >= 2) {
         for (let ecy = chunkStartY; ecy <= chunkEndY; ecy++) {
           for (let ecx = chunkStartX; ecx <= chunkEndX; ecx++) {
             const worldEnts = getEntitiesInChunk(ecx, ecy);
@@ -499,9 +566,15 @@ export default function WorldMap() {
               const z = zoom;
               ctx.save(); ctx.translate(esx, esy);
               switch (we.kind) {
-                case 'boat':
-                  ctx.fillStyle = '#8a6a40'; ctx.fillRect(-z, -z * 0.5, z * 2, z); ctx.fillStyle = '#c8a060'; ctx.fillRect(-z * 0.1, -z * 1.5, z * 0.2, z * 1.2);
+                case 'boat': {
+                  if (z < 3.5) {
+                    ctx.fillStyle = 'rgba(100,140,200,0.95)';
+                    ctx.fillRect(-2, -2, 4, 4);
+                  } else {
+                    ctx.fillStyle = '#8a6a40'; ctx.fillRect(-z, -z * 0.5, z * 2, z); ctx.fillStyle = '#c8a060'; ctx.fillRect(-z * 0.1, -z * 1.5, z * 0.2, z * 1.2);
+                  }
                   break;
+                }
                 case 'horse':
                   ctx.fillStyle = '#8a5a30'; ctx.fillRect(-z * 0.8, -z * 0.4, z * 1.6, z * 0.8); ctx.fillRect(-z * 1.0, -z * 0.8, z * 0.5, z * 0.5);
                   break;
@@ -542,12 +615,32 @@ export default function WorldMap() {
                   ctx.fillStyle = 'rgba(255,140,40,0.85)';
                   ctx.beginPath(); ctx.arc(0, -z * 0.2, z * 0.45, 0, Math.PI * 2); ctx.fill();
                   break;
-                case 'settlement_npc':
-                case 'hamlet_npc':
-                  ctx.fillStyle = '#c8a878';
+                case 'settlement_npc': {
+                  const d = we.data as Record<string, unknown>;
+                  const hasId = Boolean(d.npcId);
+                  ctx.fillStyle = hasId ? '#e8c878' : '#c8a878';
                   ctx.beginPath(); ctx.arc(0, 0, z * 0.55, 0, Math.PI * 2); ctx.fill();
                   ctx.fillStyle = '#4a4038';
                   ctx.fillRect(-z * 0.35, z * 0.1, z * 0.7, z * 0.55);
+                  if (hasId && z >= 4) {
+                    const nm = String(d.name ?? '').slice(0, 10);
+                    if (nm) {
+                      ctx.font = `${Math.max(7, z * 1.8)}px sans-serif`;
+                      ctx.textAlign = 'center';
+                      ctx.fillStyle = 'rgba(240,220,160,0.95)';
+                      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+                      ctx.lineWidth = 2;
+                      ctx.strokeText(nm, 0, -z * 1.15);
+                      ctx.fillText(nm, 0, -z * 1.15);
+                    }
+                  }
+                  break;
+                }
+                case 'hamlet_npc':
+                  ctx.fillStyle = '#a8c8c0';
+                  ctx.beginPath(); ctx.arc(0, 0, z * 0.52, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#3a5048';
+                  ctx.fillRect(-z * 0.32, z * 0.08, z * 0.64, z * 0.52);
                   break;
                 default:
                   if (we.kind.startsWith('resource_')) {

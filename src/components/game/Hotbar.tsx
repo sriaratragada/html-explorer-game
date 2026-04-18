@@ -19,6 +19,7 @@ export default function Hotbar() {
     return () => window.removeEventListener('keydown', handler);
   }, [setActive]);
 
+  if (phase === 'battle') return null;
   if (phase !== 'playing' && phase !== 'sailing') return null;
 
   const slots = inventory.slots.slice(0, 6);

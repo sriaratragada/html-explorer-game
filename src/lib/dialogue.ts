@@ -10,6 +10,8 @@ export interface DialogueOption {
     faction?: Record<string, number>;
     giveItem?: { itemId: string; qty: number };
     startQuest?: string;
+    /** Opens trail inn shop; `npcId` on tree must be the market id (`road_inn_*`). */
+    openRoadInnShop?: boolean;
   };
   exitText?: string;
 }
@@ -67,6 +69,40 @@ export function genericDialogue(npcId: string, name: string, job: string): Dialo
         options: [
           { id: 'back2', text: 'I\'ll look around.', nextNodeId: 'greet' },
           { id: 'leave3', text: 'Thanks.', exitText: `${name} nods.` },
+        ],
+      },
+    },
+  };
+}
+
+/** Trail-side inn: trade + rumors (shop opened via dialogue effect). */
+export function roadInnDialogue(innMarketId: string): DialogueTree {
+  return {
+    npcId: innMarketId,
+    startNodeId: 'greet',
+    nodes: {
+      greet: {
+        id: 'greet',
+        speaker: 'Innkeeper',
+        text: 'The hearth is warm and the road is long. Food, drink, and a few honest goods — what do you need?',
+        options: [
+          {
+            id: 'supplies',
+            text: 'I need supplies.',
+            effects: { openRoadInnShop: true },
+            exitText: 'The innkeeper slides a ledger aside and opens the storeroom.',
+          },
+          { id: 'news', text: 'What is the road saying?', nextNodeId: 'news' },
+          { id: 'leave', text: 'Just passing through.', exitText: 'Safe travels, stranger.' },
+        ],
+      },
+      news: {
+        id: 'news',
+        speaker: 'Innkeeper',
+        text: '"Bandits follow the coin, not the crown. Sleep light if you hear wheels after dark."',
+        options: [
+          { id: 'back', text: 'Good to know.', nextNodeId: 'greet' },
+          { id: 'leave2', text: 'Farewell.', exitText: 'The innkeeper nods.' },
         ],
       },
     },

@@ -92,6 +92,13 @@ export default function HelpPanel() {
               ))}
             </div>
 
+            <div className="mt-6 pt-4 border-t border-gold/10">
+              <p className="font-display text-[10px] text-gold/80 uppercase tracking-wider mb-1">Minimap</p>
+              <p className="text-[9px] text-mist/55 leading-relaxed">
+                Cyan triangles mark harbours and coastal boat landings (not every settlement). Use them to plan sea crossings.
+              </p>
+            </div>
+
             {/* Footer hint */}
             <div className="mt-8 pt-6 border-t border-gold/10">
               <p className="text-[9px] text-mist/40 text-center">

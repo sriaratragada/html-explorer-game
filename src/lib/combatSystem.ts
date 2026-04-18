@@ -36,6 +36,11 @@ export function getKillLoot(kind: EntityKind, seed = 0): KillLoot {
       return { items: [{ itemId: 'leather', qty: 1 + (r(1) > 0.5 ? 1 : 0) }], gold: 0 };
     case 'bear':
       return { items: [{ itemId: 'raw_meat', qty: 2 + (r(2) > 0.4 ? 1 : 0) }, { itemId: 'leather', qty: 2 }], gold: 0 };
+    case 'knight':
+      return {
+        items: [{ itemId: 'gold_coin', qty: 8 + Math.floor(r(2) * 14) }, { itemId: 'iron_ore', qty: 1 }],
+        gold: 12 + Math.floor(r(3) * 18),
+      };
     case 'bandit': {
       const coins = 5 + Math.floor(r(3) * 12);
       const extras = ['herb', 'cloth', 'salt'] as const;
@@ -62,6 +67,13 @@ export function getKillLoot(kind: EntityKind, seed = 0): KillLoot {
     default:
       return { items: [], gold: 0 };
   }
+}
+
+export function computePlayerStrikeDamage(inventory: Inventory, skills: SkillTree, powerMul = 1): number {
+  const baseDamage = getWeaponDamage(inventory);
+  const skillBonus = Math.floor(skills.combat.level * 1.5);
+  const hasPowerStrike = skills.combat.perks.includes('power_strike');
+  return Math.max(1, Math.floor((baseDamage + skillBonus) * (hasPowerStrike ? 1.2 : 1) * powerMul));
 }
 
 export function playerAttack(
@@ -95,10 +107,7 @@ export function playerAttack(
     });
   }
 
-  const baseDamage = getWeaponDamage(inventory);
-  const skillBonus = Math.floor(skills.combat.level * 1.5);
-  const hasPowerStrike = skills.combat.perks.includes('power_strike');
-  const totalDamage = Math.max(1, Math.floor((baseDamage + skillBonus) * (hasPowerStrike ? 1.2 : 1)));
+  const totalDamage = computePlayerStrikeDamage(inventory, skills, 1);
 
   best.hp -= totalDamage;
   const killed = best.hp <= 0;
@@ -114,12 +123,13 @@ export function playerAttack(
   return { hit: true, damage: totalDamage, killed, targetId: best.id, xpGain, targetKind, loot };
 }
 
-function getKillXp(kind: string): number {
+export function getKillXp(kind: string): number {
   switch (kind) {
     case 'deer': return 6;
     case 'sheep': return 5;
     case 'rabbit': return 4;
     case 'wolf': return 15;
+    case 'knight': return 35;
     case 'bandit': return 25;
     case 'warband': return 50;
     case 'bear': return 30;
@@ -132,6 +142,7 @@ export function enemyAttackDamage(enemy: WorldEntity, playerArmor: number): numb
   let baseDmg = 5;
   switch (enemy.kind) {
     case 'wolf': baseDmg = 5; break;
+    case 'knight': baseDmg = 10; break;
     case 'bandit': baseDmg = 8; break;
     case 'warband': baseDmg = 15; break;
     case 'bear': baseDmg = 12; break;
@@ -146,6 +157,7 @@ export function enemyAttackDamage(enemy: WorldEntity, playerArmor: number): numb
 export function getAggroRadius(enemy: WorldEntity): number {
   switch (enemy.kind) {
     case 'wolf': return 8;
+    case 'knight': return 14;
     case 'bandit': return 12;
     case 'warband': return 15;
     case 'bear': return 6;

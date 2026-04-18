@@ -1,4 +1,14 @@
-import { CHUNK_SIZE, MAP_W, MAP_H, LOCATION_COORDS, getSettlementMeta, getTileAt, tileCodeToType, getWorldSeed } from './mapGenerator';
+import {
+  CHUNK_SIZE,
+  MAP_W,
+  MAP_H,
+  LOCATION_COORDS,
+  getSettlementMeta,
+  getTileAt,
+  tileCodeToType,
+  getWorldSeed,
+} from './mapGenerator';
+import { getCoastalPortMarkers } from './coastalPorts';
 import { getSettlementSidewalkPositions, getSettlementLayoutCenter } from './settlementLayout';
 import { buildCaravanRuns } from './tradeRoutes';
 import { getHamlets, type HamletArchetype } from './hamlets';
@@ -6,7 +16,7 @@ import { INITIAL_NPCS } from './gameData';
 
 export type EntityKind =
   | 'boat' | 'cave_entrance' | 'resource_tree' | 'resource_rock' | 'resource_iron'
-  | 'resource_herb' | 'resource_berry' | 'wolf' | 'bandit' | 'warband'
+  | 'resource_herb' | 'resource_berry' | 'wolf' | 'bandit' | 'warband' | 'knight'
   | 'deer' | 'bear' | 'caravan' | 'army' | 'horse' | 'sheep' | 'rabbit'
   | 'settlement_npc' | 'hamlet_npc' | 'cooking_fire';
 
@@ -114,13 +124,17 @@ export function countWildlifeEntities(): number {
 export function initWorldEntities() {
   clearAllEntities();
 
-  // Boats at ports
+  // Boats at ports (named + Vell Harbor capital harbour)
   for (const [locId, coord] of Object.entries(LOCATION_COORDS)) {
     const meta = getSettlementMeta(locId);
-    if (meta?.type === 'port') {
+    if (meta?.type === 'port' || locId === 'vell_harbor') {
       spawnEntity('boat', coord.x - 15, coord.y + 10, { docked: true, location: locId });
       spawnEntity('boat', coord.x - 10, coord.y + 12, { docked: true, location: locId });
     }
+  }
+
+  for (const m of getCoastalPortMarkers()) {
+    spawnEntity('boat', m.x + 2, m.y + 1, { docked: true, location: 'coast', coast: m.continent });
   }
 
   // Horses at stables near major settlements
